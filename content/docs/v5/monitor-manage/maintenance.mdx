@@ -1,0 +1,317 @@
+---
+title: Maintenance
+description: Keep your IvorySQL database healthy with routine vacuuming, autovacuum tuning, reindexing, log management, and high-availability strategies.
+---
+
+# Maintenance
+
+IvorySQL databases require periodic maintenance to stay performant and reliable. This page covers routine vacuuming (including the autovacuum daemon), preventing transaction ID wraparound, reindexing, log file management, and an overview of high-availability and replication strategies.
+
+## Routine Vacuuming
+
+IvorySQL databases require periodic maintenance known as **vacuuming**. For many installations, it is sufficient to let vacuuming be performed by the **autovacuum daemon**. Some administrators will supplement or replace the daemon's activities with manually-managed `VACUUM` commands on a schedule.
+
+### Vacuuming Basics
+
+`VACUUM` processes each table regularly for several reasons:
+
+1. **Recover disk space** occupied by updated or deleted rows
+2. **Update data statistics** used by the query planner
+3. **Update the visibility map**, which speeds up index-only scans
+4. **Protect against data loss** due to transaction ID wraparound or multixact ID wraparound
+
+There are two variants:
+
+- **Standard `VACUUM`** -- removes dead row versions and marks space available for future reuse. Can run in parallel with production operations.
+- **`VACUUM FULL`** -- actively compacts tables by writing a complete new version. Requires an `ACCESS EXCLUSIVE` lock, takes much longer, and requires extra disk space. Generally, avoid `VACUUM FULL` in favor of frequent standard `VACUUM`.
+
+`VACUUM` creates substantial I/O traffic, which can impact other sessions. Configuration parameters can be adjusted to reduce the performance impact of background vacuuming.
+
+### Recovering Disk Space
+
+In IvorySQL, an `UPDATE` or `DELETE` does not immediately remove the old version of a row -- this is necessary for MVCC (multiversion concurrency control). Eventually, outdated row versions must be reclaimed to avoid unbounded disk growth. This is done by running `VACUUM`.
+
+Standard `VACUUM` removes dead row versions and marks space available for reuse, but does **not** return space to the operating system (except when pages at the end of a table become entirely free). `VACUUM FULL` actively compacts tables, minimizing size but requiring extra disk space and exclusive locks.
+
+The usual goal is to run standard `VACUUM` often enough to avoid needing `VACUUM FULL` -- maintain steady-state disk usage rather than keeping tables at minimum size.
+
+<Callout type="tip">
+Plain `VACUUM` may not suffice when a table has large numbers of dead rows from massive update/delete activity. To reclaim excess disk space, use `VACUUM FULL`, `CLUSTER`, or `ALTER TABLE` rewriting variants. All require an `ACCESS EXCLUSIVE` lock and temporarily use extra disk space equal to the table size.
+</Callout>
+
+<Callout type="tip">
+If you periodically delete an entire table's contents, use `TRUNCATE` instead of `DELETE` followed by `VACUUM`. `TRUNCATE` removes all content immediately without needing a subsequent `VACUUM`. Note that strict MVCC semantics are violated.
+</Callout>
+
+### Updating Planner Statistics
+
+The query planner relies on statistical information about table contents. Statistics are gathered by the `ANALYZE` command, which can be invoked standalone or as part of `VACUUM`.
+
+The autovacuum daemon automatically issues `ANALYZE` when a table's content changes sufficiently. However, it schedules `ANALYZE` based only on the number of rows changed -- it cannot determine whether the changes affect meaningful statistics.
+
+<Callout type="info">
+Changes in partitions and inheritance children do **not** trigger analyze on the parent table. If the parent is empty or rarely changed, run `ANALYZE` on it manually to keep statistics up to date.
+</Callout>
+
+A rule of thumb for statistics update frequency: consider how much the minimum and maximum values of your columns change. A `timestamp` column with row update times will have a constantly increasing maximum and likely needs more frequent updates than a URL column where the statistical distribution changes slowly.
+
+<Callout type="tip">
+Columns heavily used in `WHERE` clauses with irregular data distributions may benefit from finer-grain histograms. Use `ALTER TABLE SET STATISTICS` or adjust `default_statistics_target`.
+</Callout>
+
+<Callout type="tip">
+The autovacuum daemon does not issue `ANALYZE` for foreign tables. If your queries need statistics on foreign tables, schedule manual `ANALYZE` commands.
+</Callout>
+
+<Callout type="tip">
+The autovacuum daemon does not issue `ANALYZE` for partitioned tables. Run manual `ANALYZE` on parent tables periodically to keep inheritance tree statistics current.
+</Callout>
+
+### Updating the Visibility Map
+
+Vacuum maintains a **visibility map** for each table, tracking which pages contain only tuples visible to all active (and future) transactions. This serves two purposes:
+
+1. Vacuum can skip such pages on subsequent runs (nothing to clean up)
+2. IvorySQL can perform **index-only scans** -- if all tuples on a page are known visible, heap fetches can be skipped entirely. This is most useful on large datasets where the visibility map (much smaller than the heap) prevents disk accesses.
+
+### Preventing Transaction ID Wraparound Failures
+
+IvorySQL's MVCC transaction semantics depend on comparing transaction ID (XID) numbers. Since XIDs are 32-bit, a cluster running more than 4 billion transactions would suffer **transaction ID wraparound**: the XID counter wraps to zero, and past transactions suddenly appear to be in the future -- causing catastrophic data loss.
+
+To prevent this, every table in every database must be vacuumed at least once every two billion transactions.
+
+`VACUUM` marks rows as **frozen**, indicating they were inserted by a transaction committed sufficiently far in the past that their effects are visible to all current and future transactions. Frozen rows use a special `FrozenTransactionId` that is always considered older than every normal XID.
+
+Key configuration parameters:
+
+| Parameter | Purpose |
+|-----------|---------|
+| `vacuum_freeze_min_age` | How old an XID must be before rows are frozen |
+| `vacuum_freeze_table_age` | When `VACUUM` performs an aggressive vacuum (freezing all eligible rows) |
+| `autovacuum_freeze_max_age` | Maximum age before autovacuum forces an anti-wraparound vacuum (even if disabled) |
+
+The effective maximum for `vacuum_freeze_table_age` is `0.95 * autovacuum_freeze_max_age`. Setting it close to `autovacuum_freeze_max_age` can lead to unnecessary anti-wraparound vacuums; setting it lower leads to more frequent aggressive vacuuming.
+
+<Callout type="info">
+Increasing `autovacuum_freeze_max_age` causes `pg_xact` and `pg_commit_ts` to use more space. At the maximum value of 2 billion, `pg_xact` grows to ~500MB and `pg_commit_ts` to ~20GB. The default (200 million) translates to ~50MB and ~2GB respectively.
+</Callout>
+
+To check the age of unfrozen XIDs:
+
+```sql
+SELECT c.oid::regclass as table_name,
+       greatest(age(c.relfrozenxid),age(t.relfrozenxid)) as age
+FROM pg_class c
+LEFT JOIN pg_class t ON c.reltoastrelid = t.oid
+WHERE c.relkind IN ('r', 'm');
+
+SELECT datname, age(datfrozenxid) FROM pg_database;
+```
+
+If autovacuum fails to clear old XIDs, the system emits warnings when approaching the wraparound point:
+
+```
+WARNING:  database "mydb" must be vacuumed within 39985967 transactions
+HINT:  To avoid a database shutdown, execute a database-wide VACUUM in that database.
+```
+
+If ignored, the system shuts down and refuses new transactions with fewer than 3 million transactions remaining:
+
+```
+ERROR:  database is not accepting commands to avoid wraparound data loss in database "mydb"
+HINT:  Stop the postmaster and vacuum that database in single-user mode.
+```
+
+The recovery requires stopping the server and running in single-user mode.
+
+**Multixact IDs** work similarly for row locking by multiple transactions. They also use a 32-bit counter and require wraparound management. Key parameters:
+
+| Parameter | Purpose |
+|-----------|---------|
+| `vacuum_multixact_freeze_min_age` | Age before multixact IDs are replaced |
+| `vacuum_multixact_freeze_table_age` | When aggressive vacuum is forced for multixact age |
+| `autovacuum_multixact_freeze_max_age` | Safety threshold for forced aggressive vacuum |
+
+### The Autovacuum Daemon
+
+The autovacuum daemon automates `VACUUM` and `ANALYZE` execution. It consists of:
+
+- **Autovacuum launcher** -- persistent daemon that starts worker processes
+- **Autovacuum workers** -- check each table and execute `VACUUM` and/or `ANALYZE` as needed
+
+The launcher attempts to start one worker per database every `autovacuum_naptime` seconds. A maximum of `autovacuum_max_workers` can run simultaneously.
+
+A table is vacuumed when:
+
+1. Its `relfrozenxid` is older than `autovacuum_freeze_max_age` (always vacuumed)
+2. The number of obsolete tuples exceeds the **vacuum threshold**:
+
+```
+vacuum threshold = vacuum base threshold + vacuum scale factor * number of tuples
+```
+
+3. The number of inserted tuples exceeds the **insert threshold**:
+
+```
+vacuum insert threshold = vacuum insert base insert threshold + vacuum insert scale factor * number of tuples
+```
+
+For analyze, a similar threshold applies:
+
+```
+analyze threshold = analyze base threshold + analyze scale factor * number of tuples
+```
+
+<Callout type="info">
+Partitioned tables are not processed by autovacuum. Run manual `ANALYZE` when first populated and when data distribution changes significantly. Temporary tables also cannot be accessed by autovacuum.
+</Callout>
+
+<Callout type="warn">
+Regularly running commands that acquire locks conflicting with `SHARE UPDATE EXCLUSIVE` (e.g., `ANALYZE`) can prevent autovacuums from ever completing.
+</Callout>
+
+When multiple workers are running, cost delay parameters are balanced among all workers so the total I/O impact remains consistent.
+
+Autovacuum workers generally don't block other commands. If a process attempts to acquire a conflicting lock, the autovacuum is interrupted -- **unless** it is running to prevent transaction ID wraparound.
+
+## Routine Reindexing
+
+In some situations, rebuilding indexes periodically with `REINDEX` is worthwhile:
+
+- **B-tree index bloat**: Pages that become mostly empty remain allocated. Usage patterns where most but not all keys in each range are eventually deleted will see poor space utilization. Periodic reindexing is recommended.
+- **Access speed**: A freshly-constructed index is slightly faster than one updated many times, because logically adjacent pages are usually also physically adjacent in a new index.
+
+`REINDEX` can be used safely in all cases. It requires an `ACCESS EXCLUSIVE` lock by default, so consider using the `CONCURRENTLY` option (requires only `SHARE UPDATE EXCLUSIVE` lock).
+
+## Log File Maintenance
+
+Save your database server's log output -- it is invaluable for diagnosing problems. Log output tends to be voluminous, so you need to **rotate** log files periodically.
+
+### Options
+
+**Built-in log rotation**: Set `logging_collector` to `true` in `postgresql.conf`. You can also capture logs in CSV format.
+
+**External rotation with Apache's rotatelogs**:
+
+```bash
+pg_ctl start | rotatelogs /var/log/pgsql_log 86400
+```
+
+**logrotate with PostgreSQL's logging collector**: logrotate periodically archives files produced by the built-in collector. Use a `postrotate` script to send `SIGHUP` to the server (or run `pg_ctl logrotate`) to reopen the log file.
+
+<Callout type="info">
+When using static log file names, the server might fail to reopen the log file if the max open file limit is reached. Configure the logging collector to use dynamic file names and a `prerotate` script to avoid losing messages during rotation.
+</Callout>
+
+**Syslog**: Set `log_destination` to `syslog` in `postgresql.conf`. Send `SIGHUP` to the syslog daemon to force new log files. Note that syslog can be unreliable with large messages on some systems.
+
+**Third-party tools**:
+- [pgBadger](https://pgbadger.darold.net/) -- sophisticated log file analysis
+- [check_postgres](https://bucardo.org/check_postgres/) -- Nagios alerts for important log messages and other extraordinary conditions
+
+All solutions handle starting new log files but not deleting old ones. Set up a batch job to periodically clean up old log files.
+
+## High Availability, Load Balancing, and Replication
+
+IvorySQL supports several approaches for high availability and data replication. Understanding the trade-offs helps you choose the right strategy.
+
+### Comparison of Solutions
+
+| Feature | Shared Disk | File System Repl. | WAL Shipping | Logical Repl. | Trigger-Based | SQL Middleware | Async MM | Sync MM |
+|---------|-------------|-------------------|--------------|---------------|---------------|----------------|----------|---------|
+| Examples | NAS | DRBD | Built-in streaming | Built-in logical, pglogical | Londiste, Slony | pgpool-II | Bucardo | -- |
+| Comm. method | Shared disk | Disk blocks | WAL | Logical decoding | Table rows | SQL | Table rows | Table rows + locks |
+| No special hardware | -- | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Multiple primaries | -- | -- | -- | Yes | -- | Yes | Yes | Yes |
+| No overhead on primary | Yes | -- | Yes | Yes | -- | Yes | -- | -- |
+| No waiting for multiple servers | Yes | -- | Sync off | Sync off | Yes | -- | Yes | -- |
+| No data loss on primary failure | Yes | Yes | Sync on | Sync on | -- | Yes | -- | Yes |
+| Replicas accept reads | -- | -- | Hot standby | Yes | Yes | Yes | Yes | Yes |
+| Per-table granularity | -- | -- | -- | Yes | Yes | -- | Yes | Yes |
+| No conflict resolution needed | Yes | Yes | Yes | -- | Yes | Yes | -- | Yes |
+
+**Additional approaches:**
+
+- **Data Partitioning**: Split tables by data sets (e.g., by office). Each set is modified by only one server. Queries combining data can use application-level querying or replication.
+- **Multiple-Server Parallel Query Execution**: Split data among servers and have each execute part of a query, combining results. Can be implemented using PL/Proxy.
+
+### Log-Shipping Standby Servers
+
+#### Planning
+
+Create primary and standby servers as similar as possible. Path names for tablespaces are passed unmodified, so both must have the same mount paths. Hardware architecture must be the same (32-bit to 64-bit will not work).
+
+Log shipping between different major IvorySQL release levels is not possible. Different minor release levels are likely to work but are not formally supported. When updating to a new minor release, update the standby first.
+
+#### Standby Server Operation
+
+A server enters standby mode if a `standby.signal` file exists in the data directory at startup. The standby continuously applies WAL from the primary via:
+
+1. WAL archive (`restore_command`)
+2. WAL files in `pg_wal` directory
+3. Streaming replication from the primary
+
+The standby cycles through these sources until stopped or failover is triggered.
+
+#### Preparing the Primary
+
+- Set up continuous archiving to an archive directory accessible from the standby
+- If using streaming replication: configure authentication for replication connections (create a role with `REPLICATION` privilege, add `pg_hba.conf` entry with `replication` database field)
+- Set `max_wal_senders` to a sufficiently large value
+- Set `max_replication_slots` if using replication slots
+
+#### Setting Up a Standby
+
+1. Restore a base backup from the primary
+2. Create `standby.signal` in the standby's data directory
+3. Set `restore_command` to copy files from the WAL archive
+4. Set `primary_conninfo` with a libpq connection string (if using streaming replication)
+5. Set `recovery_target_timeline` to `latest` (default) for high-availability setups
+
+Example configuration:
+
+```
+primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass options=''--c wal_sender_timeout=5000'''
+restore_command = 'cp /path/to/archive/%f %p'
+archive_cleanup_command = 'pg_archivecleanup /path/to/archive %r'
+```
+
+#### Streaming Replication
+
+Streaming replication keeps the standby more up-to-date than file-based log shipping. The standby connects to the primary, which streams WAL records as they are generated.
+
+Streaming replication is **asynchronous by default** -- there is a small delay (typically under one second) between committing on the primary and changes becoming visible on the standby.
+
+Without file-based continuous archiving, the primary might recycle WAL segments before the standby receives them. Prevent this by:
+- Setting `wal_keep_size` high enough
+- Configuring a replication slot for the standby
+- Setting up a WAL archive accessible from the standby
+
+#### Authentication
+
+Replication access must be restricted to trusted users. Create a dedicated user with `REPLICATION` and `LOGIN` privileges:
+
+```
+# pg_hba.conf on primary:
+host    replication     foo             192.168.1.100/32        md5
+```
+
+On the standby, set the connection in `postgresql.conf`:
+
+```
+primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
+```
+
+#### Monitoring Replication
+
+Key health indicator: WAL records generated on the primary but not yet applied on the standby.
+
+- Compare `pg_current_wal_lsn` (primary) with `pg_last_wal_receive_lsn` (standby)
+- Check `pg_stat_replication` view -- large differences between `pg_current_wal_lsn` and `sent_lsn` indicate primary under heavy load
+- Check `pg_stat_wal_receiver` view on the standby -- large difference between `pg_last_wal_replay_lsn` and `flushed_lsn` indicates WAL arriving faster than replay
+
+#### Replication Slots
+
+Replication slots ensure the primary does not remove WAL segments until all standbys have received them, and does not remove rows that could cause recovery conflicts.
+
+Slots can be physical (for streaming replication) or logical (for logical replication). They provide automated WAL retention management without needing to tune `wal_keep_size`.

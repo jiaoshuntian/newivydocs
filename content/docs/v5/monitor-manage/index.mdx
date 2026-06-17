@@ -1,0 +1,32 @@
+---
+title: Monitor & Manage
+description: Keep your IvorySQL database healthy with monitoring, routine maintenance, and operational best practices.
+---
+
+# Monitor & Manage
+
+Once your IvorySQL cluster is running, keeping it healthy and performant requires ongoing attention. This section covers the essential operational tasks: monitoring database activity and performance, performing routine maintenance like vacuuming and log rotation, and managing upgrades, backups, and high-availability configurations.
+
+## Monitoring
+
+Learn how to observe what is happening inside your IvorySQL instance -- from basic Unix process inspection to the cumulative statistics system, wait event analysis, and progress reporting for long-running operations.
+
+<Cards>
+  <Card href="/docs/v5/monitor-manage/monitoring" title="Monitoring" description="Monitor database activity with Unix tools, statistics views, wait events, progress reporting, and dynamic tracing." />
+</Cards>
+
+## Maintenance
+
+IvorySQL requires periodic maintenance to stay performant. Vacuuming reclaims dead tuple space, reindexing keeps indexes efficient, and log rotation prevents disk exhaustion. This page covers all routine maintenance tasks.
+
+<Cards>
+  <Card href="/docs/v5/monitor-manage/maintenance" title="Maintenance" description="Routine vacuuming, autovacuum tuning, reindexing, log file management, and high-availability strategies." />
+</Cards>
+
+## Operations Management
+
+Handle day-to-day operational tasks including version upgrades, role and access management, backup and restore, data import/export, and performance tuning with EXPLAIN.
+
+<Cards>
+  <Card href="/docs/v5/monitor-manage/operations" title="Operations Management" description="Upgrade IvorySQL, manage roles and access, backup and restore, load data, and tune query performance." />
+</Cards>

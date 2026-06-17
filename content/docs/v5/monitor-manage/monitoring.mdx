@@ -1,0 +1,961 @@
+---
+title: Monitoring
+description: Monitor IvorySQL database activity using Unix tools, statistics views, wait events, progress reporting, and dynamic tracing.
+---
+
+# Monitoring
+
+IvorySQL provides a rich set of monitoring capabilities, ranging from basic Unix process inspection to detailed statistics views, wait event analysis, progress reporting for long-running commands, and dynamic tracing via DTrace/SystemTap. This guide covers all available monitoring mechanisms.
+
+## Monitoring Database Activity
+
+### Standard Unix Tools
+
+On most Unix platforms, IvorySQL modifies its command title as reported by `ps`, so individual server processes can be identified:
+
+```bash
+$ ps auxww | grep ^postgres
+postgres  15551  0.0  0.1  57536  7132 pts/0    S    18:02   0:00 postgres -i
+postgres  15554  0.0  0.0  57536  1184 ?        Ss   18:02   0:00 postgres: background writer
+postgres  15555  0.0  0.0  57536   916 ?        Ss   18:02   0:00 postgres: checkpointer
+postgres  15556  0.0  0.0  57536   916 ?        Ss   18:02   0:00 postgres: walwriter
+postgres  15557  0.0  0.0  58504  2244 ?        Ss   18:02   0:00 postgres: autovacuum launcher
+postgres  15558  0.0  0.0  17512  1068 ?        Ss   18:02   0:00 postgres: stats collector
+postgres  15582  0.0  0.0  58772  3080 ?        Ss   18:04   0:00 postgres: joe runbug 127.0.0.1 idle
+postgres  15606  0.0  0.0  58772  3052 ?        Ss   18:07   0:00 postgres: tgl regression [local] SELECT waiting
+postgres  15610  0.0  0.0  58772  3056 ?        Ss   18:07   0:00 postgres: tgl regression [local] idle in transaction
+```
+
+The first process is the primary server process. The next four are background worker processes. Each remaining process handles one client connection, displaying:
+
+```
+postgres: user database host activity
+```
+
+The activity indicator can be `idle` (waiting for a client command), `idle in transaction` (waiting inside a `BEGIN` block), or a command type name such as `SELECT`. `waiting` is appended if the server process is waiting on a lock held by another session.
+
+If `cluster_name` has been configured, it also appears in `ps` output:
+
+```bash
+$ psql -c 'SHOW cluster_name'
+ cluster_name
+--------------
+ server1
+(1 row)
+
+$ ps aux|grep server1
+postgres   27093  0.0  0.0  30096  2752 ?        Ss   11:34   0:00 postgres: server1: background writer
+```
+
+If you have turned off `update_process_title`, the activity indicator is not updated after process launch.
+
+<Callout type="tip">
+Solaris requires special handling: use `/usr/ucb/ps` with two `w` flags, and ensure the original `postgres` command line is shorter than each server process's `ps` display.
+</Callout>
+
+### The Cumulative Statistics System
+
+IvorySQL's cumulative statistics system collects and reports information about server activity, including table and index access counts, row counts, vacuum and analyze actions, and optionally function call tracking and timing.
+
+#### Statistics Collection Configuration
+
+Since collecting statistics adds overhead, you can enable or disable specific categories via configuration parameters in `postgresql.conf`:
+
+| Parameter | Purpose |
+|-----------|---------|
+| `track_activities` | Monitor the current command being executed by any server process |
+| `track_counts` | Collect cumulative statistics about table and index accesses |
+| `track_functions` | Track usage of user-defined functions |
+| `track_io_timing` | Monitor block read and write times |
+| `track_wal_io_timing` | Monitor WAL write times |
+
+These can also be toggled per session using `SET` (restricted to superusers).
+
+Cumulative statistics are collected in shared memory. When a server shuts down cleanly, a permanent copy is stored in the `pg_stat` subdirectory, allowing statistics to persist across restarts. After an unclean shutdown, all statistics counters are reset.
+
+#### Viewing Statistics
+
+Several predefined views show the current and accumulated state of the system. The information does not update instantaneously -- each server process flushes accumulated statistics to shared memory just before going idle (at least once per second).
+
+<Callout type="info">
+By default, statistics are cached until the end of the current transaction. This allows you to perform several queries and correlate results without the numbers changing underneath you. Set `stats_fetch_consistency` to `snapshot` to minimize skew, or `none` if you only access statistics once.
+</Callout>
+
+Some dynamic statistics views are security-restricted. Ordinary users can only see information about their own sessions. Superusers and roles with `pg_read_all_stats` privileges can see all information.
+
+#### Dynamic Statistics Views
+
+| View | Description |
+|------|-------------|
+| `pg_stat_activity` | One row per server process, showing state and current query |
+| `pg_stat_replication` | One row per WAL sender process, replication statistics |
+| `pg_stat_wal_receiver` | WAL receiver statistics from connected server |
+| `pg_stat_recovery_prefetch` | Statistics about blocks prefetched during recovery |
+| `pg_stat_subscription` | Information about subscription workers |
+| `pg_stat_ssl` | SSL information per connection |
+| `pg_stat_gssapi` | GSSAPI authentication and encryption per connection |
+| `pg_stat_progress_analyze` | Current progress of `ANALYZE` operations |
+| `pg_stat_progress_create_index` | Current progress of `CREATE INDEX` or `REINDEX` |
+| `pg_stat_progress_vacuum` | Current progress of `VACUUM` operations |
+| `pg_stat_progress_cluster` | Current progress of `CLUSTER` or `VACUUM FULL` |
+| `pg_stat_progress_basebackup` | Progress of streaming base backups |
+| `pg_stat_progress_copy` | Progress of `COPY` operations |
+
+#### Collected Statistics Views
+
+| View | Description |
+|------|-------------|
+| `pg_stat_archiver` | WAL archiver process activity |
+| `pg_stat_bgwriter` | Background writer process activity |
+| `pg_stat_wal` | WAL activity statistics |
+| `pg_stat_database` | Per-database wide statistics |
+| `pg_stat_database_conflicts` | Query cancels due to recovery conflicts on standby |
+| `pg_stat_all_tables` | Per-table access statistics in current database |
+| `pg_stat_sys_tables` | Same, system tables only |
+| `pg_stat_user_tables` | Same, user tables only |
+| `pg_stat_xact_all_tables` | Actions within current transaction (not yet committed) |
+| `pg_stat_xact_sys_tables` | Same, system tables only |
+| `pg_stat_xact_user_tables` | Same, user tables only |
+| `pg_stat_all_indexes` | Per-index access statistics |
+| `pg_stat_sys_indexes` | Same, system table indexes only |
+| `pg_stat_user_indexes` | Same, user table indexes only |
+| `pg_statio_all_tables` | Per-table I/O statistics |
+| `pg_statio_sys_tables` | Same, system tables only |
+| `pg_statio_user_tables` | Same, user tables only |
+| `pg_statio_all_indexes` | Per-index I/O statistics |
+| `pg_statio_sys_indexes` | Same, system table indexes only |
+| `pg_statio_user_indexes` | Same, user table indexes only |
+| `pg_statio_all_sequences` | Per-sequence I/O statistics |
+| `pg_statio_sys_sequences` | Same, system sequences only |
+| `pg_statio_user_sequences` | Same, user sequences only |
+| `pg_stat_user_functions` | Per-function execution statistics |
+| `pg_stat_xact_user_functions` | Same, current transaction only |
+| `pg_stat_slru` | SLRU cache access statistics |
+| `pg_stat_replication_slots` | Replication slot usage statistics |
+| `pg_stat_subscription_stats` | Subscription error statistics |
+
+The per-index statistics are particularly useful to determine which indexes are being used and how effective they are.
+
+The `pg_statio_` views are primarily useful for determining buffer cache effectiveness. When disk reads are much smaller than buffer hits, the cache is satisfying most requests without kernel calls.
+
+### pg_stat_activity
+
+The `pg_stat_activity` view has one row per server process:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `datid` | `oid` | OID of the connected database |
+| `datname` | `name` | Name of the connected database |
+| `pid` | `integer` | Process ID of this backend |
+| `leader_pid` | `integer` | Process ID of the parallel group leader (if applicable) |
+| `usesysid` | `oid` | OID of the logged-in user |
+| `usename` | `name` | Name of the logged-in user |
+| `application_name` | `text` | Name of the connected application |
+| `client_addr` | `inet` | IP address of the client (null for Unix socket or internal process) |
+| `client_hostname` | `text` | Host name from reverse DNS lookup (if `log_hostname` is enabled) |
+| `client_port` | `integer` | TCP port number, or `-1` for Unix socket |
+| `backend_start` | `timestamp with time zone` | When this process started |
+| `xact_start` | `timestamp with time zone` | When current transaction started |
+| `query_start` | `timestamp with time zone` | When the currently active query started |
+| `state_change` | `timestamp with time zone` | When the `state` was last changed |
+| `wait_event_type` | `text` | Type of event the backend is waiting for (if any) |
+| `wait_event` | `text` | Wait event name if currently waiting |
+| `state` | `text` | Overall state: `active`, `idle`, `idle in transaction`, `idle in transaction (aborted)`, `fastpath function call`, `disabled` |
+| `backend_xid` | `xid` | Top-level transaction identifier |
+| `backend_xmin` | `xid` | The backend's `xmin` horizon |
+| `query_id` | `bigint` | Identifier of the most recent query |
+| `query` | `text` | Text of the most recent query (truncated at 1024 bytes by default) |
+| `backend_type` | `text` | Type: `autovacuum launcher`, `autovacuum worker`, `client backend`, `background writer`, etc. |
+
+<Callout type="info">
+The `wait_event` and `state` columns are independent. A backend in `active` state may or may not be waiting on an event. If `state` is `active` and `wait_event` is non-null, a query is executing but is being blocked somewhere.
+</Callout>
+
+#### Wait Event Types
+
+| Type | Description |
+|------|-------------|
+| `Activity` | Server process is idle in its main loop |
+| `BufferPin` | Waiting for exclusive access to a data buffer |
+| `Client` | Waiting for activity on a client socket |
+| `Extension` | Waiting for a condition defined by an extension |
+| `IO` | Waiting for an I/O operation to complete |
+| `IPC` | Waiting for interaction with another server process |
+| `Lock` | Waiting for a heavyweight lock (tables, relations, etc.) |
+| `LWLock` | Waiting for a lightweight lock (shared memory data structures) |
+| `Timeout` | Waiting for a timeout to expire |
+
+Example -- view wait events:
+
+```sql
+SELECT pid, wait_event_type, wait_event FROM pg_stat_activity WHERE wait_event IS NOT NULL;
+ pid  | wait_event_type | wait_event
+------+-----------------+------------
+ 2540 | Lock            | relation
+ 6644 | LWLock          | ProcArray
+(2 rows)
+```
+
+### pg_stat_replication
+
+Shows statistics about replication to each connected standby server (only directly connected standbys):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID of WAL sender |
+| `usesysid` | `oid` | OID of the user |
+| `usename` | `name` | Name of the user |
+| `application_name` | `text` | Name of the connected application |
+| `client_addr` | `inet` | IP address of the standby |
+| `client_port` | `integer` | TCP port number |
+| `backend_start` | `timestamp with time zone` | When the client connected |
+| `backend_xmin` | `xid` | Standby's `xmin` horizon from hot_standby_feedback |
+| `state` | `text` | `startup`, `catchup`, `streaming`, `backup`, `stopping` |
+| `sent_lsn` | `pg_lsn` | Last WAL location sent |
+| `write_lsn` | `pg_lsn` | Last WAL location written to disk by standby |
+| `flush_lsn` | `pg_lsn` | Last WAL location flushed to disk by standby |
+| `replay_lsn` | `pg_lsn` | Last WAL location replayed on standby |
+| `write_lag` | `interval` | Delay for `remote_write` synchronous commit |
+| `flush_lag` | `interval` | Delay for `on` synchronous commit |
+| `replay_lag` | `interval` | Delay for `remote_apply` synchronous commit |
+| `sync_priority` | `integer` | Priority for synchronous standby selection |
+| `sync_state` | `text` | `async`, `potential`, `sync`, `quorum` |
+| `reply_time` | `timestamp with time zone` | Send time of last reply from standby |
+
+<Callout type="info">
+Lag times are not predictions of catch-up time. When the standby has caught up completely, lag columns show the time taken for the most recent reported WAL, then revert to NULL after a short idle period.
+</Callout>
+
+### Other Key Views
+
+#### pg_stat_replication_slots
+
+Per-replication-slot usage statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `slot_name` | `text` | Unique identifier for the replication slot |
+| `spill_txns` | `bigint` | Transactions spilled to disk (exceeded `logical_decoding_work_mem`) |
+| `spill_count` | `bigint` | Number of times transactions were spilled |
+| `spill_bytes` | `bigint` | Amount of data spilled to disk |
+| `stream_txns` | `bigint` | In-progress transactions streamed to output plugin |
+| `stream_count` | `bigint` | Number of times transactions were streamed |
+| `stream_bytes` | `bigint` | Amount of data streamed |
+| `total_txns` | `bigint` | Total decoded transactions sent to output plugin |
+| `total_bytes` | `bigint` | Total decoded data sent to output plugin |
+| `stats_reset` | `timestamp with time zone` | Last statistics reset time |
+
+#### pg_stat_wal_receiver
+
+WAL receiver statistics (single row):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID of WAL receiver |
+| `status` | `text` | Activity status |
+| `receive_start_lsn` | `pg_lsn` | First WAL location when receiver started |
+| `receive_start_tli` | `integer` | First timeline number |
+| `written_lsn` | `pg_lsn` | Last WAL written to disk (not flushed) |
+| `flushed_lsn` | `pg_lsn` | Last WAL flushed to disk |
+| `received_tli` | `integer` | Timeline of last received WAL |
+| `last_msg_send_time` | `timestamp with time zone` | Send time of last message from origin |
+| `last_msg_receipt_time` | `timestamp with time zone` | Receipt time of last message |
+| `latest_end_lsn` | `pg_lsn` | Last WAL location reported to origin |
+| `latest_end_time` | `timestamp with time zone` | Time of last report to origin |
+| `slot_name` | `text` | Replication slot name used |
+| `sender_host` | `text` | Host of the connected IvorySQL instance |
+| `sender_port` | `integer` | Port of the connected instance |
+| `conninfo` | `text` | Connection string (security-sensitive fields obfuscated) |
+
+#### pg_stat_recovery_prefetch
+
+Statistics about blocks prefetched during recovery:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `stats_reset` | `timestamp with time zone` | Last reset time |
+| `prefetch` | `bigint` | Blocks prefetched (not in buffer pool) |
+| `hit` | `bigint` | Blocks not prefetched (already in buffer pool) |
+| `skip_init` | `bigint` | Blocks not prefetched (would be zero-initialized) |
+| `skip_new` | `bigint` | Blocks not prefetched (did not exist yet) |
+| `skip_fpw` | `bigint` | Blocks not prefetched (full page image in WAL) |
+| `skip_rep` | `bigint` | Blocks not prefetched (already recently prefetched) |
+| `wal_distance` | `int` | How many bytes ahead the prefetcher is looking |
+| `block_distance` | `int` | How many blocks ahead the prefetcher is looking |
+| `io_depth` | `int` | Prefetches initiated but not yet known completed |
+
+#### pg_stat_subscription
+
+Subscription worker information:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `subid` | `oid` | OID of the subscription |
+| `subname` | `name` | Name of the subscription |
+| `pid` | `integer` | Process ID of the subscription worker |
+| `relid` | `oid` | OID of relation being synchronized (null for main apply) |
+| `received_lsn` | `pg_lsn` | Last WAL location received |
+| `last_msg_send_time` | `timestamp with time zone` | Send time of last message |
+| `last_msg_receipt_time` | `timestamp with time zone` | Receipt time of last message |
+| `latest_end_lsn` | `pg_lsn` | Last WAL location reported to origin |
+| `latest_end_time` | `timestamp with time zone` | Time of last report |
+
+#### pg_stat_subscription_stats
+
+Per-subscription error statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `subid` | `oid` | OID of the subscription |
+| `subname` | `name` | Name of the subscription |
+| `apply_error_count` | `bigint` | Errors during change application |
+| `sync_error_count` | `bigint` | Errors during initial table synchronization |
+| `stats_reset` | `timestamp with time zone` | Last reset time |
+
+#### pg_stat_ssl
+
+SSL usage per connection:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `ssl` | `boolean` | True if SSL is used |
+| `version` | `text` | SSL version in use |
+| `cipher` | `text` | SSL cipher in use |
+| `bits` | `integer` | Bits in encryption algorithm |
+| `client_dn` | `text` | Distinguished Name from client certificate |
+| `client_serial` | `numeric` | Serial number of client certificate |
+| `issuer_dn` | `text` | DN of the certificate issuer |
+
+#### pg_stat_gssapi
+
+GSSAPI usage per connection:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `gss_authenticated` | `boolean` | True if GSSAPI was used |
+| `principal` | `text` | Principal used for authentication |
+| `encrypted` | `boolean` | True if GSSAPI encryption is in use |
+
+#### pg_stat_archiver
+
+WAL archiver statistics (single row):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `archived_count` | `bigint` | WAL files successfully archived |
+| `last_archived_wal` | `text` | Most recently archived WAL file |
+| `last_archived_time` | `timestamp with time zone` | Time of most recent archive |
+| `failed_count` | `bigint` | Failed archive attempts |
+| `last_failed_wal` | `text` | WAL file of most recent failure |
+| `last_failed_time` | `timestamp with time zone` | Time of most recent failure |
+| `stats_reset` | `timestamp with time zone` | Last reset time |
+
+#### pg_stat_bgwriter
+
+Background writer statistics (single row):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `checkpoints_timed` | `bigint` | Scheduled checkpoints performed |
+| `checkpoints_req` | `bigint` | Requested checkpoints performed |
+| `checkpoint_write_time` | `double precision` | Time spent writing files during checkpoints (ms) |
+| `checkpoint_sync_time` | `double precision` | Time spent syncing files during checkpoints (ms) |
+| `buffers_checkpoint` | `bigint` | Buffers written during checkpoints |
+| `buffers_clean` | `bigint` | Buffers written by background writer |
+| `maxwritten_clean` | `bigint` | Times background writer stopped due to buffer limit |
+| `buffers_backend` | `bigint` | Buffers written directly by a backend |
+| `buffers_backend_fsync` | `bigint` | Times a backend executed its own fsync |
+| `buffers_alloc` | `bigint` | Buffers allocated |
+| `stats_reset` | `timestamp with time zone` | Last reset time |
+
+#### pg_stat_database
+
+Per-database statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `datid` | `oid` | OID of the database |
+| `datname` | `name` | Name of the database |
+| `numbackends` | `integer` | Currently connected backends |
+| `xact_commit` | `bigint` | Transactions committed |
+| `xact_rollback` | `bigint` | Transactions rolled back |
+| `blks_read` | `bigint` | Disk blocks read |
+| `blks_hit` | `bigint` | Blocks found in buffer cache |
+| `tup_returned` | `bigint` | Rows returned by sequential scans and index entries |
+| `tup_fetched` | `bigint` | Rows fetched by index scans |
+| `tup_inserted` | `bigint` | Rows inserted |
+| `tup_updated` | `bigint` | Rows updated |
+| `tup_deleted` | `bigint` | Rows deleted |
+| `conflicts` | `bigint` | Queries canceled due to recovery conflicts |
+| `temp_files` | `bigint` | Temporary files created |
+| `temp_bytes` | `bigint` | Data written to temporary files |
+| `deadlocks` | `bigint` | Deadlocks detected |
+| `checksum_failures` | `bigint` | Data page checksum failures (or null) |
+| `checksum_last_failure` | `timestamp with time zone` | Time of last checksum failure |
+| `blk_read_time` | `double precision` | Time spent reading data blocks (ms) |
+| `blk_write_time` | `double precision` | Time spent writing data blocks (ms) |
+| `session_time` | `double precision` | Total session time (ms) |
+| `active_time` | `double precision` | Time executing SQL (ms) |
+| `idle_in_transaction_time` | `double precision` | Time idle in transaction (ms) |
+| `sessions` | `bigint` | Total sessions established |
+| `sessions_abandoned` | `bigint` | Sessions lost due to client disconnect |
+| `sessions_fatal` | `bigint` | Sessions terminated by fatal errors |
+| `sessions_killed` | `bigint` | Sessions terminated by operator intervention |
+| `stats_reset` | `timestamp with time zone` | Last reset time |
+
+#### pg_stat_database_conflicts
+
+Recovery conflict statistics on standby servers:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `datid` | `oid` | OID of the database |
+| `datname` | `name` | Name of the database |
+| `confl_tablespace` | `bigint` | Queries canceled due to dropped tablespaces |
+| `confl_lock` | `bigint` | Queries canceled due to lock timeouts |
+| `confl_snapshot` | `bigint` | Queries canceled due to old snapshots |
+| `confl_bufferpin` | `bigint` | Queries canceled due to pinned buffers |
+| `confl_deadlock` | `bigint` | Queries canceled due to deadlocks |
+
+#### pg_stat_all_tables
+
+Per-table access statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `relid` | `oid` | OID of the table |
+| `schemaname` | `name` | Schema name |
+| `relname` | `name` | Table name |
+| `seq_scan` | `bigint` | Sequential scans initiated |
+| `seq_tup_read` | `bigint` | Rows fetched by sequential scans |
+| `idx_scan` | `bigint` | Index scans initiated |
+| `idx_tup_fetch` | `bigint` | Rows fetched by index scans |
+| `n_tup_ins` | `bigint` | Rows inserted |
+| `n_tup_upd` | `bigint` | Rows updated |
+| `n_tup_del` | `bigint` | Rows deleted |
+| `n_tup_hot_upd` | `bigint` | HOT-updated rows (no separate index update) |
+| `n_live_tup` | `bigint` | Estimated live rows |
+| `n_dead_tup` | `bigint` | Estimated dead rows |
+| `n_mod_since_analyze` | `bigint` | Rows modified since last analyze |
+| `n_ins_since_vacuum` | `bigint` | Rows inserted since last vacuum |
+| `last_vacuum` | `timestamp with time zone` | Last manual vacuum |
+| `last_autovacuum` | `timestamp with time zone` | Last autovacuum |
+| `last_analyze` | `timestamp with time zone` | Last manual analyze |
+| `last_autoanalyze` | `timestamp with time zone` | Last autoanalyze |
+| `vacuum_count` | `bigint` | Manual vacuum count |
+| `autovacuum_count` | `bigint` | Autovacuum count |
+| `analyze_count` | `bigint` | Manual analyze count |
+| `autoanalyze_count` | `bigint` | Autoanalyze count |
+
+#### pg_stat_all_indexes
+
+Per-index access statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `relid` | `oid` | OID of the table |
+| `indexrelid` | `oid` | OID of the index |
+| `schemaname` | `name` | Schema name |
+| `relname` | `name` | Table name |
+| `indexrelname` | `name` | Index name |
+| `idx_scan` | `bigint` | Index scans initiated |
+| `idx_tup_read` | `bigint` | Index entries returned by scans |
+| `idx_tup_fetch` | `bigint` | Live rows fetched via this index |
+
+<Callout type="info">
+`idx_tup_read` and `idx_tup_fetch` can differ even without bitmap scans: `idx_tup_read` counts index entries retrieved, while `idx_tup_fetch` counts live rows fetched from the table. The latter will be lower if dead rows are fetched or if index-only scans avoid heap fetches.
+</Callout>
+
+#### pg_statio_all_tables
+
+Per-table I/O statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `relid` | `oid` | OID of the table |
+| `schemaname` | `name` | Schema name |
+| `relname` | `name` | Table name |
+| `heap_blks_read` | `bigint` | Disk blocks read from table |
+| `heap_blks_hit` | `bigint` | Buffer hits in table |
+| `idx_blks_read` | `bigint` | Disk blocks read from all indexes |
+| `idx_blks_hit` | `bigint` | Buffer hits in all indexes |
+| `toast_blks_read` | `bigint` | Disk blocks read from TOAST table |
+| `toast_blks_hit` | `bigint` | Buffer hits in TOAST table |
+| `tidx_blks_read` | `bigint` | Disk blocks read from TOAST indexes |
+| `tidx_blks_hit` | `bigint` | Buffer hits in TOAST indexes |
+
+#### pg_statio_all_indexes
+
+Per-index I/O statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `relid` | `oid` | OID of the table |
+| `indexrelid` | `oid` | OID of the index |
+| `schemaname` | `name` | Schema name |
+| `relname` | `name` | Table name |
+| `indexrelname` | `name` | Index name |
+| `idx_blks_read` | `bigint` | Disk blocks read from index |
+| `idx_blks_hit` | `bigint` | Buffer hits in index |
+
+#### pg_statio_all_sequences
+
+Per-sequence I/O statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `relid` | `oid` | OID of the sequence |
+| `schemaname` | `name` | Schema name |
+| `relname` | `name` | Sequence name |
+| `blks_read` | `bigint` | Disk blocks read |
+| `blks_hit` | `bigint` | Buffer hits |
+
+#### pg_stat_user_functions
+
+Per-function execution statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `funcid` | `oid` | OID of the function |
+| `schemaname` | `name` | Schema name |
+| `funcname` | `name` | Function name |
+| `calls` | `bigint` | Number of calls |
+| `total_time` | `double precision` | Total time in function and called functions (ms) |
+| `self_time` | `double precision` | Time in function itself, excluding called functions (ms) |
+
+#### pg_stat_slru
+
+SLRU (simple least-recently-used) cache statistics:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `name` | `text` | Name of the SLRU |
+| `blks_zeroed` | `bigint` | Blocks zeroed during initialization |
+| `blks_hit` | `bigint` | Blocks found in SLRU (no read needed) |
+| `blks_read` | `bigint` | Disk blocks read for SLRU |
+| `blks_written` | `bigint` | Disk blocks written for SLRU |
+| `blks_exists` | `bigint` | Blocks checked for existence |
+| `flushes` | `bigint` | Flushes of dirty data |
+| `truncates` | `bigint` | Truncations performed |
+| `stats_reset` | `timestamp with time zone` | Last reset time |
+
+### Statistics Functions
+
+Additional functions for working with statistics:
+
+| Function | Description |
+|----------|-------------|
+| `pg_backend_pid()` → `integer` | Process ID of the current session's server process |
+| `pg_stat_get_activity(integer)` → `setof record` | Backend info by PID, or all backends if NULL |
+| `pg_stat_get_snapshot_timestamp()` → `timestamp with time zone` | Timestamp of current statistics snapshot |
+| `pg_stat_clear_snapshot()` → `void` | Discard current statistics snapshot |
+| `pg_stat_reset()` → `void` | Reset all counters for current database (superuser only) |
+| `pg_stat_reset_shared(text)` → `void` | Reset cluster-wide counters (`bgwriter`, `archiver`, `wal`, `recovery_prefetch`) |
+| `pg_stat_reset_single_table_counters(oid)` → `void` | Reset counters for a single table or index |
+| `pg_stat_reset_single_function_counters(oid)` → `void` | Reset counters for a single function |
+| `pg_stat_reset_slru(text)` → `void` | Reset counters for a single SLRU cache |
+| `pg_stat_reset_replication_slot(text)` → `void` | Reset replication slot statistics |
+| `pg_stat_reset_subscription_stats(oid)` → `void` | Reset subscription statistics |
+
+<Callout type="warn">
+Using `pg_stat_reset()` also resets counters that autovacuum uses to determine when to trigger a vacuum or analyze. This can cause table bloat or stale statistics. Run `ANALYZE` across the database after resetting statistics.
+</Callout>
+
+### View Locks
+
+The `pg_locks` system table shows information about outstanding locks in the lock manager. It can be used to:
+
+- View all currently outstanding locks, locks on specific relations, or locks held by a specific session
+- Determine which relation has the most ungranted locks (a potential contention source)
+- Assess the impact of lock contention on database performance
+
+## Progress Reporting
+
+IvorySQL reports progress for certain long-running commands via dedicated views. Currently supported: `ANALYZE`, `CLUSTER`, `CREATE INDEX`, `VACUUM`, `COPY`, and `BASE_BACKUP`.
+
+### ANALYZE Progress
+
+View: `pg_stat_progress_analyze`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `datid` | `oid` | Database OID |
+| `datname` | `name` | Database name |
+| `relid` | `oid` | OID of table being analyzed |
+| `phase` | `text` | Current processing phase |
+| `sample_blks_total` | `bigint` | Total heap blocks to sample |
+| `sample_blks_scanned` | `bigint` | Heap blocks scanned so far |
+| `ext_stats_total` | `bigint` | Total extended statistics |
+| `ext_stats_computed` | `bigint` | Extended statistics computed |
+| `child_tables_total` | `bigint` | Total child tables |
+| `child_tables_done` | `bigint` | Child tables scanned |
+| `current_child_table_relid` | `oid` | OID of child table currently being scanned |
+
+**ANALYZE Phases:**
+
+| Phase | Description |
+|-------|-------------|
+| `initializing` | Preparing to begin heap scan |
+| `acquiring sample rows` | Scanning the table for sample rows |
+| `acquiring inherited sample rows` | Scanning child tables for sample rows |
+| `computing statistics` | Computing statistics from samples |
+| `computing extended statistics` | Computing extended statistics |
+| `finalizing analyze` | Updating `pg_class` |
+
+<Callout type="info">
+On partitioned tables, `ANALYZE` recursively analyzes all partitions. Progress is reported first for the parent table, then for each partition.
+</Callout>
+
+### CREATE INDEX Progress
+
+View: `pg_stat_progress_create_index`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `datid` | `oid` | Database OID |
+| `datname` | `name` | Database name |
+| `relid` | `oid` | OID of the table |
+| `index_relid` | `oid` | OID of the index (0 for non-concurrent CREATE INDEX) |
+| `command` | `text` | `CREATE INDEX`, `CREATE INDEX CONCURRENTLY`, `REINDEX`, or `REINDEX CONCURRENTLY` |
+| `phase` | `text` | Current processing phase |
+| `lockers_total` | `bigint` | Total lockers to wait for |
+| `lockers_done` | `bigint` | Lockers already waited for |
+| `current_locker_pid` | `bigint` | PID of locker currently being waited for |
+| `blocks_total` | `bigint` | Total blocks in current phase |
+| `blocks_done` | `bigint` | Blocks processed in current phase |
+| `tuples_total` | `bigint` | Total tuples in current phase |
+| `tuples_done` | `bigint` | Tuples processed in current phase |
+| `partitions_total` | `bigint` | Total partitions (for partitioned tables) |
+| `partitions_done` | `bigint` | Partitions processed |
+
+**CREATE INDEX Phases:**
+
+| Phase | Description |
+|-------|-------------|
+| `initializing` | Preparing to create the index |
+| `waiting for writers before build` | Waiting for write-lock transactions to finish (concurrent mode) |
+| `building index` | Building the index via access method |
+| `waiting for writers before validation` | Waiting for write-lock transactions before validation (concurrent mode) |
+| `index validation: scanning index` | Scanning index for tuples to validate (concurrent mode) |
+| `index validation: sorting tuples` | Sorting output of index scanning |
+| `index validation: scanning table` | Scanning table to validate index tuples (concurrent mode) |
+| `waiting for old snapshots` | Waiting for snapshots to release (concurrent mode) |
+| `waiting for readers before marking dead` | Waiting for read-lock transactions before marking old index dead (REINDEX CONCURRENTLY) |
+| `waiting for readers before dropping` | Waiting for read-lock transactions before dropping old index (REINDEX CONCURRENTLY) |
+
+### VACUUM Progress
+
+View: `pg_stat_progress_vacuum`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `datid` | `oid` | Database OID |
+| `datname` | `name` | Database name |
+| `relid` | `oid` | OID of table being vacuumed |
+| `phase` | `text` | Current processing phase |
+| `heap_blks_total` | `bigint` | Total heap blocks in table |
+| `heap_blks_scanned` | `bigint` | Heap blocks scanned |
+| `heap_blks_vacuumed` | `bigint` | Heap blocks vacuumed |
+| `index_vacuum_count` | `bigint` | Completed index vacuum cycles |
+| `max_dead_tuples` | `bigint` | Max dead tuples before index vacuum (based on `maintenance_work_mem`) |
+| `num_dead_tuples` | `bigint` | Dead tuples collected since last index vacuum |
+
+**VACUUM Phases:**
+
+| Phase | Description |
+|-------|-------------|
+| `initializing` | Preparing to scan the heap |
+| `scanning heap` | Scanning, pruning, and defragmenting pages |
+| `vacuuming indexes` | Vacuuming indexes |
+| `vacuuming heap` | Vacuuming the heap after index vacuum |
+| `cleaning up indexes` | Post-scan index cleanup |
+| `truncating heap` | Truncating empty pages at end of relation |
+| `performing final cleanup` | Vacuuming free space map, updating statistics |
+
+`VACUUM FULL` progress is reported via `pg_stat_progress_cluster` since both `VACUUM FULL` and `CLUSTER` rewrite the table.
+
+### CLUSTER Progress
+
+View: `pg_stat_progress_cluster`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `datid` | `oid` | Database OID |
+| `datname` | `name` | Database name |
+| `relid` | `oid` | OID of table being clustered |
+| `command` | `text` | `CLUSTER` or `VACUUM FULL` |
+| `phase` | `text` | Current processing phase |
+| `cluster_index_relid` | `oid` | OID of index being used (or 0) |
+| `heap_tuples_scanned` | `bigint` | Heap tuples scanned |
+| `heap_tuples_written` | `bigint` | Heap tuples written |
+| `heap_blks_total` | `bigint` | Total heap blocks |
+| `heap_blks_scanned` | `bigint` | Heap blocks scanned |
+| `index_rebuild_count` | `bigint` | Indexes rebuilt |
+
+**CLUSTER / VACUUM FULL Phases:**
+
+| Phase | Description |
+|-------|-------------|
+| `initializing` | Preparing to scan |
+| `seq scanning heap` | Sequential scan of the table |
+| `index scanning heap` | Index scan of the table (CLUSTER only) |
+| `sorting tuples` | Sorting tuples (CLUSTER only) |
+| `writing new heap` | Writing the new heap |
+| `swapping relation files` | Swapping new files into place |
+| `rebuilding index` | Rebuilding indexes |
+| `performing final cleanup` | Final cleanup |
+
+### Base Backup Progress
+
+View: `pg_stat_progress_basebackup`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | WAL sender process ID |
+| `phase` | `text` | Current phase |
+| `backup_total` | `bigint` | Estimated total data to stream |
+| `backup_streamed` | `bigint` | Data streamed so far |
+| `tablespaces_total` | `bigint` | Total tablespaces to stream |
+| `tablespaces_streamed` | `bigint` | Tablespaces streamed so far |
+
+**Base Backup Phases:**
+
+| Phase | Description |
+|-------|-------------|
+| `initializing` | Preparing to begin backup |
+| `waiting for checkpoint to finish` | Waiting for start-of-backup checkpoint |
+| `estimating backup size` | Estimating total data size |
+| `streaming database files` | Streaming database files |
+| `waiting for wal archiving to finish` | Waiting for required WAL files to archive |
+| `transferring wal files` | Transferring WAL logs generated during backup |
+
+### COPY Progress
+
+View: `pg_stat_progress_copy`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | `integer` | Process ID |
+| `datid` | `oid` | Database OID |
+| `datname` | `name` | Database name |
+| `relid` | `oid` | OID of table (0 if copying from SELECT) |
+| `command` | `text` | `COPY FROM` or `COPY TO` |
+| `type` | `text` | `FILE`, `PROGRAM`, `PIPE`, or `CALLBACK` |
+| `bytes_processed` | `bigint` | Bytes processed so far |
+| `bytes_total` | `bigint` | Total source file size (0 if unavailable) |
+| `tuples_processed` | `bigint` | Tuples processed so far |
+| `tuples_excluded` | `bigint` | Tuples excluded by WHERE clause |
+
+## Dynamic Tracing
+
+IvorySQL supports dynamic tracing via DTrace (available on Solaris, macOS, FreeBSD, NetBSD, Oracle Linux) or SystemTap (Linux). This allows external utilities to trace execution at specific points in the code.
+
+### Compiling for Dynamic Tracing
+
+By default, probes are not compiled in. To include DTrace support, specify `--enable-dtrace` during configure:
+
+```bash
+./configure --enable-dtrace
+```
+
+### Built-in Probes
+
+A number of standard probes are provided in the source code:
+
+| Name | Parameters | Description |
+|------|------------|-------------|
+| `transaction-start` | `(LocalTransactionId)` | Start of a new transaction |
+| `transaction-commit` | `(LocalTransactionId)` | Transaction completed successfully |
+| `transaction-abort` | `(LocalTransactionId)` | Transaction completed unsuccessfully |
+| `query-start` | `(const char *)` | Query processing started |
+| `query-done` | `(const char *)` | Query processing complete |
+| `query-parse-start` | `(const char *)` | Query parsing started |
+| `query-parse-done` | `(const char *)` | Query parsing complete |
+| `query-rewrite-start` | `(const char *)` | Query rewriting started |
+| `query-rewrite-done` | `(const char *)` | Query rewriting complete |
+| `query-plan-start` | `()` | Query planning started |
+| `query-plan-done` | `()` | Query planning complete |
+| `query-execute-start` | `()` | Query execution started |
+| `query-execute-done` | `()` | Query execution complete |
+| `checkpoint-start` | `(int)` | Checkpoint started |
+| `checkpoint-done` | `(int, int, int, int, int)` | Checkpoint complete |
+| `buffer-read-start` | `(ForkNumber, BlockNumber, Oid, Oid, Oid, int, bool)` | Buffer read started |
+| `buffer-read-done` | `(ForkNumber, BlockNumber, Oid, Oid, Oid, int, bool, bool)` | Buffer read complete |
+| `buffer-flush-start` | `(ForkNumber, BlockNumber, Oid, Oid, Oid)` | Buffer flush started |
+| `buffer-flush-done` | `(ForkNumber, BlockNumber, Oid, Oid, Oid)` | Buffer flush complete |
+| `wal-insert` | `(unsigned char, unsigned char)` | WAL record inserted |
+| `smgr-md-read-start` | `(ForkNumber, BlockNumber, Oid, Oid, Oid, int)` | Block read started |
+| `smgr-md-read-done` | `(ForkNumber, BlockNumber, Oid, Oid, Oid, int, int, int)` | Block read complete |
+| `smgr-md-write-start` | `(ForkNumber, BlockNumber, Oid, Oid, Oid, int)` | Block write started |
+| `smgr-md-write-done` | `(ForkNumber, BlockNumber, Oid, Oid, Oid, int, int, int)` | Block write complete |
+| `sort-start` | `(int, bool, int, int, bool, int)` | Sort operation started |
+| `sort-done` | `(bool, long)` | Sort complete |
+| `lwlock-acquire` | `(char *, LWLockMode)` | LWLock acquired |
+| `lwlock-release` | `(char *)` | LWLock released |
+| `lock-wait-start` | `(unsigned int, ..., LOCKMODE)` | Heavyweight lock wait started |
+| `lock-wait-done` | `(unsigned int, ..., LOCKMODE)` | Heavyweight lock wait done |
+| `deadlock-found` | `()` | Deadlock detected |
+
+### Using Probes
+
+Example DTrace script for analyzing transaction counts:
+
+```c
+#!/usr/sbin/dtrace -qs
+
+postgresql$1:::transaction-start
+{
+      @start["Start"] = count();
+      self->ts  = timestamp;
+}
+
+postgresql$1:::transaction-abort
+{
+      @abort["Abort"] = count();
+}
+
+postgresql$1:::transaction-commit
+/self->ts/
+{
+      @commit["Commit"] = count();
+      @time["Total time (ns)"] = sum(timestamp - self->ts);
+      self->ts=0;
+}
+```
+
+Running the script:
+
+```bash
+# ./txn_count.d `pgrep -n postgres` or ./txn_count.d <PID>
+^C
+
+Start                                          71
+Commit                                         70
+Total time (ns)                        2312105013
+```
+
+<Callout type="info">
+SystemTap uses double underscores in place of hyphens for probe names (e.g., `transaction__start` instead of `transaction-start`). This is expected to be fixed in future SystemTap releases.
+</Callout>
+
+### Defining New Probes
+
+To add a custom probe:
+
+1. Decide on probe names and data to expose
+2. Add probe definitions to `src/backend/utils/probes.d`
+3. Include `pg_trace.h` and insert `TRACE_POSTGRESQL` probe macros
+4. Recompile and verify
+
+**Example: trace all new transactions by transaction ID:**
+
+1. Name the probe `transaction-start` with a `LocalTransactionId` parameter
+2. Add to `probes.d`:
+
+```
+probe transaction__start(LocalTransactionId);
+```
+
+3. At the desired location in source code:
+
+```c
+TRACE_POSTGRESQL_TRANSACTION_START(vxid.localTransactionId);
+```
+
+4. Verify after recompiling:
+
+```text
+# dtrace -ln transaction-start
+   ID    PROVIDER          MODULE           FUNCTION NAME
+18705 postgresql49878     postgres     StartTransactionCommand transaction-start
+```
+
+<Callout type="warn">
+When `--enable-dtrace` is used, probe macro arguments are evaluated whenever control passes through the macro, even if no tracing is active. Protect expensive function calls:
+
+```c
+if (TRACE_POSTGRESQL_TRANSACTION_START_ENABLED())
+    TRACE_POSTGRESQL_TRANSACTION_START(some_function(...));
+```
+</Callout>
+
+## Monitoring Disk Usage
+
+### Determining Disk Usage
+
+Each table has a primary heap disk file. Tables with wide-value columns may also have a TOAST file. Each table and index is stored in a separate disk file (possibly multiple files if exceeding 1 GB).
+
+Monitor disk space using SQL functions (recommended), the `oid2name` module, or system catalog inspection:
+
+```sql
+SELECT pg_relation_filepath(oid), relpages FROM pg_class WHERE relname = 'customer';
+
+ pg_relation_filepath | relpages
+----------------------+----------
+ base/16384/16806     |       60
+(1 row)
+```
+
+Each page is typically 8 kilobytes. (`relpages` is only updated by `VACUUM`, `ANALYZE`, and certain DDL commands.)
+
+Show TOAST table usage:
+
+```sql
+SELECT relname, relpages
+FROM pg_class,
+     (SELECT reltoastrelid FROM pg_class WHERE relname = 'customer') AS ss
+WHERE oid = ss.reltoastrelid OR
+      oid = (SELECT indexrelid FROM pg_index WHERE indrelid = ss.reltoastrelid)
+ORDER BY relname;
+
+       relname        | relpages
+----------------------+----------
+ pg_toast_16806       |        0
+ pg_toast_16806_index |        1
+```
+
+Show index sizes:
+
+```sql
+SELECT c2.relname, c2.relpages
+FROM pg_class c, pg_class c2, pg_index i
+WHERE c.relname = 'customer' AND
+      c.oid = i.indrelid AND
+      c2.oid = i.indexrelid
+ORDER BY c2.relname;
+
+      relname      | relpages
+-------------------+----------
+ customer_id_index |       26
+```
+
+Find largest tables:
+
+```sql
+SELECT relname, relpages
+FROM pg_class
+ORDER BY relpages DESC;
+
+       relname        | relpages
+----------------------+----------
+ bigtable             |     3290
+ customer             |     3144
+```
+
+### Disk Full Failure
+
+The most critical disk monitoring task is ensuring the disk does not become full. A filled WAL disk will cause the server to panic and shut down. A filled data disk won't corrupt data but may prevent useful activity.
+
+If you cannot free space, consider moving database files to other file systems using tablespaces.
+
+<Callout type="tip">
+Some file systems perform badly when nearly full. Do not wait until the disk is completely full to take action.
+</Callout>
+
+If your system has per-user disk quotas, the database is subject to the quota of the user the server runs as. Exceeding the quota has the same effects as running out of disk space entirely.
