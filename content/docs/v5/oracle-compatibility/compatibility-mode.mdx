@@ -1,0 +1,100 @@
+---
+title: Compatibility Mode (GUC)
+description: Configure Oracle compatibility behavior using GUC parameters.
+---
+
+# Compatibility Mode (GUC)
+
+IvorySQL uses Grand Unified Configuration (GUC) parameters to control Oracle-compatible behavior. A dedicated framework centralizes all compatibility-related settings, minimizing changes to the PostgreSQL kernel source.
+
+## How It Works
+
+Oracle compatibility GUC parameters are defined in `ivy_guc.c`. Five helper functions handle different data types:
+
+- `Ivy_ConfigureNamesBool` — boolean parameters
+- `Ivy_ConfigureNamesInt` — integer parameters
+- `Ivy_ConfigureNamesString` — string parameters
+- `Ivy_ConfigureNamesReal` — real (floating-point) parameters
+- `Ivy_ConfigureNamesEnum` — enum parameters
+
+To add a new compatibility parameter, simply register it in the corresponding array.
+
+## Available Parameters
+
+| Parameter | Description |
+|---|---|
+| `ivorysql.compatible_mode` | Controls whether the session uses PG or Oracle mode. Changed with `SET`, reset with `RESET` or `RESET ALL`. |
+| `ivorysql.database_mode` | Shows the database's initialization mode (PG or Oracle). Read-only — `SET`/`RESET` have no effect. |
+| `ivorysql.datetime_ignore_nls_mask` | Controls whether date formats ignore NLS parameters. Values 0–15. Default: `0`. |
+| `ivorysql.enable_emptystring_to_null` | When `on`, converts inserted empty strings to `NULL`. See [Empty String to NULL](/docs/v5/oracle-compatibility/empty-string-null). |
+| `ivorysql.identifier_case_switch` | Sets the identifier case conversion mode. See [Case Conversion](/docs/v5/oracle-compatibility/case-conversion). |
+| `ivorysql.listen_address` | The address for compatibility mode listening. Configured via `ivorysql.conf` at init time. |
+| `ivorysql.port` | The port number for compatibility mode connections. Configured via `ivorysql.conf` at init time. |
+| `nls_date_format` | Default date format. Default: `'YYYY-MM-DD'`. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `nls_length_semantics` | Controls whether character size units are bytes or characters. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `nls_timestamp_format` | Controls timestamp formatting. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `nls_timestamp_tz_format` | Controls timestamp with time zone formatting. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `shared_preload_libraries` | Libraries loaded at server start. Configured via `ivorysql.conf`. |
+
+## Example: datetime_ignore_nls_mask
+
+This parameter controls which date/time types are excluded from NLS formatting. Values range from 0 to 15:
+
+| Value | Types excluded from NLS formatting |
+|---|---|
+| 0 | None — all time formats use NLS |
+| 1 | `date` |
+| 2 | `timestamp` |
+| 3 | `date`, `timestamp` |
+| 4 | `timestamptz` |
+| 5 | `date`, `timestamptz` |
+| 6 | `timestamp`, `timestamptz` |
+| 7 | `date`, `timestamp`, `timestamptz` |
+| 8 | `timestampltz` |
+| 9 | `date`, `timestampltz` |
+| 10 | `timestamp`, `timestampltz` |
+| 11 | `date`, `timestamp`, `timestampltz` |
+| 12 | `timestamptz`, `timestampltz` |
+| 13 | `date`, `timestamptz`, `timestampltz` |
+| 14 | `timestamp`, `timestamptz`, `timestampltz` |
+| 15 | All date/time types |
+
+### Usage Example
+
+```sql
+-- Check current settings
+SET ivorysql.compatible_mode TO oracle;
+SHOW nls_date_format;
+--  YYYY-MM-DD
+
+SHOW ivorysql.datetime_ignore_nls_mask;
+--  0
+
+-- Create a test table
+CREATE TABLE test_nls_date(a int, created_at date);
+
+-- Insert data — works with NLS format
+INSERT INTO test_nls_date VALUES(1, '2024/04/05');
+SELECT * FROM test_nls_date;
+--  a | created_at
+-- ---+------------
+--  1 | 2024-04-05
+
+-- Change the NLS date format
+SET nls_date_format TO 'yy-mm-dd';
+
+-- Insert with new NLS format
+INSERT INTO test_nls_date VALUES(2, '24/04/15');
+SELECT * FROM test_nls_date;
+--  a | created_at
+-- ---+------------
+--  1 | 24-04-05
+--  2 | 24-04-15
+
+-- Disable NLS processing for date (mask = 1)
+SET ivorysql.datetime_ignore_nls_mask TO 1;
+
+-- This now fails because NLS formatting is ignored
+INSERT INTO test_nls_date VALUES(3, '24/05/15');
+-- ERROR: date/time field value out of range: "24/05/15"
+```

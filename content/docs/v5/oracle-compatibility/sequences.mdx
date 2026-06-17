@@ -1,0 +1,43 @@
+---
+title: Sequences
+description: Use Oracle-style sequence access with NEXTVAL and CURRVAL syntax.
+---
+
+# Sequences
+
+IvorySQL supports Oracle-compatible sequence syntax, allowing you to access sequence values using `sequence_name.NEXTVAL` and `sequence_name.CURRVAL` — the same dot-notation used in Oracle.
+
+## How It Works
+
+Sequences are database objects that generate integer sequences, similar to tables and views. They can be used by any object in the global database namespace and support both ascending and descending order.
+
+## Examples
+
+### Create and use a sequence
+
+```sql
+CREATE SEQUENCE seq;
+
+-- Get the next value using Oracle dot-notation
+SELECT seq.NEXTVAL FROM dual;
+--  nextval
+-- ---------
+--        1
+```
+
+### Restart a sequence
+
+```sql
+ALTER SEQUENCE seq RESTART START WITH 10;
+
+SELECT seq.NEXTVAL FROM dual;
+--  nextval
+-- ---------
+--       10
+```
+
+### Drop a sequence
+
+```sql
+DROP SEQUENCE seq;
+```

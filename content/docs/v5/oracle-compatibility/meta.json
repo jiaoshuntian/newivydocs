@@ -1,0 +1,27 @@
+{
+  "title": "Oracle Compatibility",
+  "pages": [
+    "index",
+    "compatibility-mode",
+    "case-conversion",
+    "like-operator",
+    "anonymous-block",
+    "pl-isql",
+    "data-types",
+    "ports-ip",
+    "xml-functions",
+    "sequences",
+    "packages",
+    "invisible-columns",
+    "rowid-column",
+    "out-parameter",
+    "type-rowtype",
+    "nls-parameters",
+    "force-view",
+    "nested-subfunctions",
+    "sys-guid",
+    "empty-string-null",
+    "call-into",
+    "gb18030"
+  ]
+}

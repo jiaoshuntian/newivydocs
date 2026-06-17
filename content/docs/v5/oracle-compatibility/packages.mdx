@@ -1,0 +1,118 @@
+---
+title: Packages
+description: Encapsulate related stored procedures, functions, and variables in Oracle-compatible packages.
+---
+
+# Packages
+
+IvorySQL provides Oracle-compatible package support. A package is an encapsulated collection of related program objects — procedures, functions, variables, constants, cursors, and exceptions — stored together as a single unit in the database.
+
+## Package Structure
+
+A package has two parts:
+
+1. **Package specification** — declares the public interface (procedures, functions, variables).
+2. **Package body** — defines the implementation of declared objects and can include private members.
+
+## Operations
+
+### Create Package Specification
+
+```sql
+CREATE OR REPLACE PACKAGE pkg IS
+  var1 integer;
+  var2 integer;
+  FUNCTION test_f(id integer) RETURN integer;
+  PROCEDURE test_p(id integer);
+END;
+/
+```
+
+### Create Package Body
+
+The package body must be in the same schema as the specification, and the specification must already exist:
+
+```sql
+CREATE OR REPLACE PACKAGE BODY pkg IS
+  var3 integer;
+
+  FUNCTION test_f(id integer) RETURN integer IS
+  BEGIN
+    dbms_output.put_line('pkg test_f');
+    RETURN id;
+  END;
+
+  PROCEDURE test_p(id integer) IS
+  BEGIN
+    dbms_output.put_line('pkg proc');
+  END;
+
+  -- Private function (not declared in specification)
+  FUNCTION test_piv1(id integer) RETURN integer IS
+  BEGIN
+    RETURN id;
+  END;
+
+  -- Private procedure (not declared in specification)
+  PROCEDURE test_piv2(id integer) IS
+  BEGIN
+    dbms_output.put_line('privite proc');
+  END;
+
+BEGIN
+  -- Initialization block
+  var1 := 1;
+  var2 := 2;
+  var3 := 4;
+END;
+/
+```
+
+### Alter Package
+
+```sql
+ALTER PACKAGE pkg NONEDITIONABLE;
+```
+
+### Drop Package
+
+```sql
+-- Drop both specification and body
+DROP PACKAGE pkg;
+
+-- Drop only the body
+DROP PACKAGE BODY pkg;
+```
+
+### DISCARD PACKAGE
+
+Compatible with PostgreSQL's `DISCARD` feature:
+
+```sql
+DISCARD PACKAGE;
+-- DISCARD PACKAGES
+```
+
+## Inspecting Packages in psql
+
+Use `\dk` to list and inspect packages:
+
+```sql
+-- List all packages
+\dk
+--        List of packages
+--  Schema |   Name   |  Owner
+-- --------+----------+----------
+--  public | pkg      | ivorysql
+--  public | test_pkg | ivorysql
+
+-- List specific package
+\dk pkg
+--      List of packages
+--  Schema | Name |  Owner
+-- --------+------+----------
+--  public | pkg  | ivorysql
+
+-- Detailed package info (specification + body)
+\dk+
+```

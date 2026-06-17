@@ -1,0 +1,62 @@
+---
+title: GB18030 Character Set
+description: Use the Chinese national standard GB18030 character encoding as a server encoding.
+---
+
+# GB18030 Character Set
+
+GB18030 is a Chinese national standard character encoding designed to include all Chinese characters and various minority scripts, with alignment to Unicode. IvorySQL provides full server-side support for GB18030 as a database encoding.
+
+## Features
+
+1. **GB18030 as server encoding** — `initdb -E GB18030` is available, and `SHOW server_encoding` displays `GB18030`.
+2. **Bidirectional conversion** — Full conversion between GB18030 and UTF8.
+3. **Multibyte character boundaries** — Proper handling of variable-width characters (1, 2, or 4 bytes).
+
+## Initialization
+
+### Using initdb
+
+```bash
+# GB18030 (2000 standard)
+initdb -E GB18030 -D ../data
+
+# GB18030-2022 (latest standard)
+initdb -E GB18030_2022 -D ../data
+```
+
+When `GB18030_2022` is specified, it is internally mapped to the `gb18030` encoding ID, and the `gb18030_2022` extension is automatically loaded via `shared_preload_libraries` in `ivorysql.conf`.
+
+## How It Works
+
+### Multibyte Character Handling
+
+Function pointers for GB18030 are registered in the wide-character framework:
+
+| Function | Purpose |
+|---|---|
+| `pg_gb180302wchar_with_len` | Convert GB18030 to wchar |
+| `pg_wchar2gb18030_with_len` | Convert wchar to GB18030 |
+| `pg_gb18030_mblen` | Returns character byte length (1/2/4) |
+| `pg_gb18030_dsplen` | Calculates display width |
+| `pg_gb18030_verifier` | Validates byte sequences |
+
+### Client-Server Interaction
+
+- **Receiving data** — When a UTF8 client connects, the server converts incoming data from UTF8 to GB18030 using `utf8_to_gb18030()` before storing.
+- **Sending data** — When a UTF8 client queries, the server converts stored GB18030 data to UTF8 using `gb18030_to_utf8()` before sending.
+
+### Mapping Tables
+
+The GB18030-2022 mapping is generated from `GB18030-2022.xml` via a Perl script. The implementation uses a table-driven approach with algorithmic fallback for uncovered ranges.
+
+## Verification
+
+After initialization:
+
+```sql
+SHOW server_encoding;
+--  server_encoding
+-- -----------------
+--  GB18030
+```

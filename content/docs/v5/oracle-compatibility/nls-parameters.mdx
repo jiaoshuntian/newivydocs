@@ -1,0 +1,97 @@
+---
+title: NLS Parameters
+description: Configure National Language Support parameters for dates, currencies, and character lengths.
+---
+
+# NLS Parameters
+
+National Language Support (NLS) is Oracle's localization functionality. IvorySQL provides Oracle-compatible NLS parameters for date formatting, currency symbols, character length semantics, and more.
+
+## Available Parameters
+
+| Parameter | Description |
+|---|---|
+| `ivorysql.datetime_ignore_nls_mask` | Whether date formats ignore NLS parameters. Default: `0`. |
+| `nls_length_semantics` | Whether CHAR/VARCHAR/VARCHAR2 size units are `BYTE` or `CHAR`. |
+| `nls_date_format` | Default date format. Default: `'YYYY-MM-DD'`. |
+| `nls_timestamp_format` | Controls timestamp formatting. |
+| `nls_timestamp_tz_format` | Controls timestamp with time zone formatting. |
+| `nls_territory` | Default region for the database. |
+| `nls_iso_currency` | Currency symbol for a specified country/region. |
+| `nls_currency` | Local currency symbol (used with `L` in numeric formats). |
+
+## NLS Date Mask Settings
+
+The `ivorysql.datetime_ignore_nls_mask` parameter controls which date types are excluded from NLS formatting:
+
+```sql
+SET ivorysql.datetime_ignore_nls_mask = 0;
+SELECT '2025-10-15 11:00:00.102030 CST'::oratimestamp;
+-- ERROR: datetime format picture ends before converting entire input string
+
+SET ivorysql.datetime_ignore_nls_mask = 2;
+SELECT '2025-10-15 11:00:00.102030 CST'::oratimestamp;
+--         oratimestamp
+-- ----------------------------
+--  2025-10-15 11:00:00.102030
+```
+
+## Disabling NLS Date or Timestamp Format
+
+Set the format to `"pg"` to use PostgreSQL-style formatting:
+
+```sql
+SELECT '2025-10-15 11:00:00.102030 '::oratimestamp;
+--         oratimestamp
+-- ----------------------------
+--  2025-10-15 11:00:00.102030
+
+SET nls_timestamp_format = 'pg';
+SELECT '2025-10-15 11:00:00.102030 '::oratimestamp;
+-- ERROR: date format not recognized
+```
+
+## nls_length_semantics
+
+Controls whether string type sizes are measured in bytes or characters:
+
+```sql
+ALTER SESSION SET nls_length_semantics = CHAR;
+
+CREATE TABLE character_tb(
+  char_c char(6),
+  char_b varchar2(6 BYTE),
+  char_v varchar(6)
+);
+
+INSERT INTO character_tb VALUES('abcdef', '123456', 'OK');
+SELECT * FROM character_tb;
+--  char_c | char_b | char_v
+-- --------+--------+--------
+--  abcdef | 123456 | OK
+
+SELECT length(char_b), length(char_c), length(char_v) FROM character_tb;
+--  length | length | length
+-- --------+--------+--------
+--       6 |      6 |      2
+```
+
+## NLS Currency Symbols
+
+```sql
+SET nls_currency TO 'CHINA';
+SHOW nls_currency;
+--  nls_currency
+-- --------------
+--  CHINA
+
+SET nls_currency TO 'China';
+SHOW nls_currency;
+--  nls_currency
+-- --------------
+--  China
+```
+
+<Callout type="info">
+  The behavior of `nls_currency` and `nls_iso_currency` is affected by the `ivorysql.identifier_case_switch` compatibility feature. See [Case Conversion](/docs/v5/oracle-compatibility/case-conversion).
+</Callout>

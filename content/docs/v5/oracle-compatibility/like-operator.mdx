@@ -1,0 +1,81 @@
+---
+title: LIKE Operator
+description: Use Oracle-compatible LIKE fuzzy queries across different data types.
+---
+
+# LIKE Operator
+
+IvorySQL extends the `LIKE` operator to work like Oracle's implementation, supporting fuzzy matching with wildcards across string, number, date, and timestamp columns.
+
+## How It Differs from PostgreSQL
+
+| Database | LIKE behavior |
+|---|---|
+| Oracle | String type is `VARCHAR2`. `LIKE` works on columns of `NUMBER`, `DATE`, and string types with wildcards. |
+| IvorySQL | The base string type is `TEXT`. `LIKE` operates on `TEXT`, and other types are implicitly converted to `TEXT`, so no custom operators are needed. |
+
+## Examples
+
+```sql
+CREATE TABLE t_ora_like (
+  id int,
+  str1 varchar(8),
+  date1 timestamp with time zone,
+  date2 time with time zone,
+  num int,
+  str2 varchar(8)
+);
+
+INSERT INTO t_ora_like (id, str1, date1, date2)
+  VALUES (123456, 'test1', '2022-09-26 16:39:20', '2022-09-26 16:39:20');
+INSERT INTO t_ora_like (id, str1, date1, date2)
+  VALUES (123457, 'test2', '2022-09-26 16:40:20', '2022-09-26 16:40:20');
+INSERT INTO t_ora_like (id, str1, date1, date2)
+  VALUES (223456, 'test3', '2022-09-26 16:41:20', '2022-09-26 16:41:20');
+INSERT INTO t_ora_like (id, str1, date1, date2)
+  VALUES (123458, 'test4', '2022-09-26 16:42:20', '2022-09-26 16:42:20');
+```
+
+### LIKE on string columns
+
+```sql
+SELECT * FROM t_ora_like WHERE str1 LIKE 'test%';
+--  id   | str1  | date1               | date2       | num | str2
+-- ------+-------+---------------------+-------------+-----+------
+--  123456 | test1 | 2022-09-26 16:39:20+08 | 16:39:20+08 |     |
+--  123457 | test2 | 2022-09-26 16:40:20+08 | 16:40:20+08 |     |
+--  223456 | test3 | 2022-09-26 16:41:20+08 | 16:41:20+08 |     |
+--  123458 | test4 | 2022-09-26 16:42:20+08 | 16:42:20+08 |     |
+```
+
+### LIKE on timestamp columns
+
+```sql
+SELECT * FROM t_ora_like WHERE date1 LIKE '2022%';
+-- Returns all rows (all dates start with 2022)
+```
+
+### LIKE on time columns
+
+```sql
+SELECT * FROM t_ora_like WHERE date2 LIKE '16%';
+-- Returns all rows (all times start with 16)
+```
+
+### LIKE on integer columns
+
+```sql
+SELECT * FROM t_ora_like WHERE id LIKE '123%';
+--  id   | str1  | date1               | date2       | num | str2
+-- ------+-------+---------------------+-------------+-----+------
+--  123456 | test1 | ... | ... |     |
+--  123457 | test2 | ... | ... |     |
+--  123458 | test4 | ... | ... |     |
+```
+
+### LIKE with NULL
+
+```sql
+SELECT * FROM t_ora_like WHERE id LIKE NULL;
+-- (0 rows)
+```

@@ -1,0 +1,127 @@
+---
+title: OUT Parameters
+description: Use Oracle-style OUT and IN OUT parameters in functions, procedures, and anonymous blocks.
+---
+
+# OUT Parameters
+
+IvorySQL supports Oracle-compatible OUT parameters in functions, procedures, anonymous blocks, and the `libpq` interface.
+
+## Functions with OUT Parameters
+
+### Syntax
+
+```sql
+CREATE [ OR REPLACE ] FUNCTION
+    name ( [ [ argmode ] [ argname ] argtype [ { DEFAULT | = } default_expr ] [, ...] ] )
+    [ RETURNS rettype | RETURNS TABLE ( column_name column_type [, ...] ) ]
+    ...
+```
+
+The `argmode` can be `IN`, `OUT`, `INOUT` (or `IN OUT`), or `VARIADIC`. If not specified, the default is `IN`.
+
+### Key Differences from PostgreSQL
+
+- OUT parameters are **not associated** with the return value data type.
+- Neither `IN OUT` nor `OUT` modes can have default values.
+- If a function has OUT parameters and the return type is not `void`, the function body must include a `RETURN` statement.
+
+### Examples
+
+#### OUT parameters are not associated with return type
+
+```sql
+CREATE OR REPLACE FUNCTION test_return_out(
+  id integer,
+  price OUT integer,
+  name OUT varchar
+) RETURN varchar AS
+BEGIN
+  price := 20000;
+  name := 'test a char out';
+  RETURN 'welcome to QingDao';
+END;
+/
+-- CREATE FUNCTION
+```
+
+#### OUT/IN OUT cannot have default values
+
+```sql
+CREATE OR REPLACE FUNCTION test_return_inout(
+  id integer,
+  price IN OUT integer DEFAULT 100,
+  name OUT varchar
+) RETURN varchar AS
+BEGIN
+  price := 20000 + price;
+  name := 'this is a test';
+  RETURN 'welcome to QingDao';
+END;
+/
+-- ERROR: IN OUT formal parameters may have no default expressions
+```
+
+#### RETURN statement required
+
+If the function has OUT parameters and a non-void return type but lacks a `RETURN` statement, it compiles but raises an error at runtime:
+
+```sql
+CREATE OR REPLACE FUNCTION f2(id integer, price OUT integer)
+RETURN varchar AS
+BEGIN
+  price := 2;
+END;
+/
+-- CREATE FUNCTION (compiles OK)
+
+-- Calling it fails:
+DECLARE
+  a varchar(20);
+  b int;
+BEGIN
+  a := f2(1, b);
+END;
+/
+-- ERROR: Function returned without value
+```
+
+## OUT Parameters in Anonymous Blocks
+
+IvorySQL supports binding variables in anonymous blocks using colon placeholders (`:1`, `:name`) and the `DO ... USING` syntax:
+
+```sql
+DO $$
+DECLARE
+  a int;
+BEGIN
+  :x := 1;
+  :y := 2;
+END; $$ USING OUT, OUT;
+--  $1 | $2
+-- ----+----
+--   1 |  2
+```
+
+The `get_parameter_description()` system function returns variable name-to-position mappings:
+
+```sql
+SELECT * FROM get_parameter_description('insert into t values(:x,:y)');
+--  name  | position
+-- -------+----------
+--  false |        0
+--  :x    |        1
+--  :y    |        2
+```
+
+## libpq Support
+
+The libpq interface provides Oracle-compatible functions for preparing, binding, and executing statements with OUT parameters:
+
+1. `IvyHandleAlloc` — allocate statement and error handles
+2. `IvyStmtPrepare` — prepare the statement
+3. `IvyBindByPos` or `IvyBindByName` — bind parameters
+4. `IvyStmtExecute` — execute (can be repeated)
+5. `IvyFreeHandle` — release handles
+
+Example programs are in `src/interfaces/libpq/ivytest` in the source tree.

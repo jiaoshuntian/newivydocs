@@ -1,0 +1,90 @@
+---
+title: Nested Subfunctions
+description: Declare and invoke subfunctions and subprocedures within PL/iSQL blocks.
+---
+
+# Nested Subfunctions
+
+IvorySQL supports Oracle-style nested subfunctions, allowing you to declare and invoke subfunctions or subprocedures inside anonymous blocks, functions, or procedures.
+
+## Key Features
+
+- **Scoped visibility** — nested subfunctions are only visible within their parent block.
+- **Parent scope access** — nested subfunctions can read and update variables defined in the parent scope.
+- **Local variables** — subfunctions introduce their own local variables, which the parent cannot access.
+- **Overloading resolution** — homonymous subfunctions are distinguished by argument count, data type, or named parameters.
+
+## Examples
+
+### Basic nested subfunction
+
+```sql
+DO $$
+DECLARE
+  v_result integer;
+
+  FUNCTION inner_square(p_value integer) RETURN integer IS
+  BEGIN
+    RAISE NOTICE 'inner_square called';
+    RETURN p_value * p_value;
+  END;
+BEGIN
+  v_result := inner_square(10);
+  RAISE NOTICE 'result=%', v_result;
+END;
+$$ LANGUAGE plisql;
+```
+
+### Accessing parent scope variables
+
+The nested subfunction can modify parent variables:
+
+```sql
+DO $$
+DECLARE
+  v_base_multiplier integer := 20;
+  v_audit_counter   integer := 0;
+  v_result integer;
+
+  FUNCTION inner_square(p_value integer) RETURN integer IS
+  BEGIN
+    RAISE NOTICE 'inner_square called';
+    v_audit_counter := v_audit_counter + 1;
+    RETURN v_base_multiplier * p_value;
+  END;
+BEGIN
+  v_result := inner_square(10);
+  RAISE NOTICE 'result=%', v_result;
+  RAISE NOTICE 'v_audit_counter=%', v_audit_counter;
+END;
+$$ LANGUAGE plisql;
+```
+
+### Polymorphic overloading
+
+Overloaded subfunctions are resolved by argument type:
+
+```sql
+DO $$
+DECLARE
+  v_last_notice text := 'none';
+
+  FUNCTION describe_value(p_input anyelement) RETURN text IS
+  BEGIN
+    v_last_notice := format('polymorphic dispatch with %s', pg_typeof(p_input));
+    RETURN v_last_notice;
+  END;
+
+  FUNCTION describe_value(p_input anyarray, p_element anyelement) RETURN text IS
+  BEGIN
+    v_last_notice := format('array dispatch with %s', pg_typeof(p_input)::text);
+    RETURN v_last_notice;
+  END;
+BEGIN
+  RAISE NOTICE '%', describe_value(100);
+  RAISE NOTICE '%', describe_value('IvorySQL'::text);
+  RAISE NOTICE '%', describe_value(ARRAY[1,2,3], NULL::int);
+  RAISE NOTICE 'last notice=%', v_last_notice;
+END;
+$$ LANGUAGE plisql;
+```

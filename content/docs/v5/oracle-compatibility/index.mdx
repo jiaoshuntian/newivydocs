@@ -1,0 +1,65 @@
+---
+title: Oracle Compatibility
+description: Run Oracle workloads on IvorySQL with drop-in compatibility for PL/SQL, data types, functions, and syntax.
+---
+
+# Oracle Compatibility
+
+IvorySQL is an advanced PostgreSQL distribution that provides deep Oracle compatibility, enabling you to run Oracle workloads with minimal or zero code changes. Whether you are migrating an existing Oracle database or building a new application that targets Oracle syntax, IvorySQL gives you the tools to do it on a fully open-source, community-driven foundation.
+
+## Dual-Mode Architecture
+
+IvorySQL runs in one of two modes, determined at cluster initialization time:
+
+- **Oracle mode** (default) — the database understands and executes Oracle-compatible SQL syntax, PL/iSQL procedural language, and Oracle built-in functions.
+- **PG mode** — standard PostgreSQL behavior, with no Oracle compatibility layer active.
+
+You select the mode when initializing a cluster using the `-m` flag on `initdb`:
+
+```bash
+# Oracle-compatible mode (default)
+initdb -D ../data
+
+# Explicitly Oracle mode
+initdb -D ../data -m oracle
+
+# PostgreSQL mode — no Oracle compatibility
+initdb -D ../data -m pg
+```
+
+If the `-m` parameter is not specified, the cluster defaults to Oracle-compatible mode. Once a cluster is initialized in PG mode, Oracle syntax is not available and the mode cannot be switched.
+
+## How It Works
+
+IvorySQL's compatibility is implemented across several layers:
+
+- **Dual-port design** — Port 5432 behaves as standard PostgreSQL. Port 1521 (default) automatically enables Oracle compatibility mode for all connections. If you connect via 5432 and need Oracle mode, set `ivorysql.compatible_mode = oracle`.
+- **Dual parser** — A separate parser module handles Oracle-specific syntax, keeping PG and Oracle syntax paths isolated to minimize interference.
+- **PL/iSQL procedural language** — A new procedural language compatible with Oracle's PL/SQL, supporting anonymous blocks, nested subfunctions, packages, and more.
+- **GUC framework** — A unified configuration framework for Oracle compatibility parameters like `ivorysql.compatible_mode`, `nls_date_format`, and others.
+
+## What You'll Find Here
+
+<Cards>
+  <Card href="/docs/v5/oracle-compatibility/compatibility-mode" title="Compatibility Mode (GUC)" description="Configure Oracle compatibility with GUC parameters." />
+  <Card href="/docs/v5/oracle-compatibility/case-conversion" title="Case Conversion" description="Control identifier case sensitivity with three conversion modes." />
+  <Card href="/docs/v5/oracle-compatibility/like-operator" title="LIKE Operator" description="Oracle-compatible fuzzy query behavior with wildcards." />
+  <Card href="/docs/v5/oracle-compatibility/anonymous-block" title="Anonymous Block" description="Execute PL/iSQL code without persisting it as a database object." />
+  <Card href="/docs/v5/oracle-compatibility/pl-isql" title="PL/iSQL & Stored Procedures" description="Oracle-compatible functions, procedures, and procedural language." />
+  <Card href="/docs/v5/oracle-compatibility/data-types" title="Data Types & Built-ins" description="Oracle data types and built-in functions like SYSDATE, TO_CHAR, and more." />
+  <Card href="/docs/v5/oracle-compatibility/ports-ip" title="Ports & IP" description="Configure dedicated Oracle-compatible ports and addresses." />
+  <Card href="/docs/v5/oracle-compatibility/xml-functions" title="XML Functions" description="Oracle-compatible XML processing with XMLType and related functions." />
+  <Card href="/docs/v5/oracle-compatibility/sequences" title="Sequences" description="Oracle-style NEXTVAL and CURRVAL sequence access." />
+  <Card href="/docs/v5/oracle-compatibility/packages" title="Packages" description="Encapsulate related procedures, functions, and variables in packages." />
+  <Card href="/docs/v5/oracle-compatibility/invisible-columns" title="Invisible Columns" description="Hide columns from SELECT * for cleaner application migration." />
+  <Card href="/docs/v5/oracle-compatibility/rowid-column" title="RowID Column" description="Oracle-compatible ROWID pseudo-column for row identification." />
+  <Card href="/docs/v5/oracle-compatibility/out-parameter" title="OUT Parameters" description="Functions and procedures with Oracle-style OUT parameters." />
+  <Card href="/docs/v5/oracle-compatibility/type-rowtype" title="%TYPE & %ROWTYPE" description="Oracle-compatible variable type declarations." />
+  <Card href="/docs/v5/oracle-compatibility/nls-parameters" title="NLS Parameters" description="National Language Support for dates, currencies, and character lengths." />
+  <Card href="/docs/v5/oracle-compatibility/force-view" title="Force View" description="Create placeholder views before their dependencies exist." />
+  <Card href="/docs/v5/oracle-compatibility/nested-subfunctions" title="Nested Subfunctions" description="Declare and invoke subfunctions within PL/iSQL blocks." />
+  <Card href="/docs/v5/oracle-compatibility/sys-guid" title="SYS_GUID" description="Generate unique 16-byte identifiers, Oracle-style." />
+  <Card href="/docs/v5/oracle-compatibility/empty-string-null" title="Empty String to NULL" description="Automatically convert empty strings to NULL values." />
+  <Card href="/docs/v5/oracle-compatibility/call-into" title="CALL INTO" description="Invoke functions with INTO clause for host variable assignment." />
+  <Card href="/docs/v5/oracle-compatibility/gb18030" title="GB18030 Character Set" description="Chinese national standard character encoding support." />
+</Cards>

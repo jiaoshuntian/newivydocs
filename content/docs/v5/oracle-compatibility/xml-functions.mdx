@@ -1,0 +1,141 @@
+---
+title: XML Functions
+description: Process XML data with Oracle-compatible XML functions and XMLType support.
+---
+
+# XML Functions
+
+IvorySQL provides Oracle-compatible XML processing functions, built on PostgreSQL's XML support via the `libxml2` library. These functions are delivered as a sub-plugin of the `ivorysql_ora` extension.
+
+## XMLType
+
+A dedicated `XMLType` data type is added so that Oracle SQL statements using `XMLType` parameters work without modification:
+
+```sql
+SELECT existsnode(XMLType('<a><b>d</b></a>'), '/a') FROM dual;
+```
+
+## Available Functions
+
+| # | Function | Description |
+|---|---|---|
+| 1 | `extract(XML)` | Return content at the specified XML node path |
+| 2 | `extractvalue` | Retrieve a single value from one XML node |
+| 3 | `existsnode` | Check whether XML content matches a path expression |
+| 4 | `deletexml` | Delete XML nodes at specified paths |
+| 5 | `appendchildxml` | Insert child nodes into an XML object |
+| 6 | `updatexml` | Update content at a specific XML node path |
+| 7 | `insertxmlbefore` | Insert child nodes before a specified path |
+| 8 | `insertxmlafter` | Insert child nodes after a specified path |
+| 9 | `insertchildxml` | Insert child nodes into a specified XML path |
+| 10 | `insertchildxmlbefore` | Insert child nodes before a specified XML path |
+| 11 | `insertchildxmlafter` | Insert child nodes after a specified XML path |
+| 12 | `xmlisvalid` | Check whether XML content is valid |
+
+## Examples
+
+### Setup
+
+```sql
+SET ivorysql.compatible_mode TO oracle;
+
+CREATE TABLE xmltest(id int, data XMLType);
+INSERT INTO xmltest VALUES(1, '<value>one</value>');
+INSERT INTO xmltest VALUES(2, '<value>two</value>');
+```
+
+### extract(XML)
+
+```sql
+SELECT extract(XMLType('<AA><ID>1</ID></AA>'), '/AA/ID') FROM dual;
+--  extract
+-- ------------
+--  <ID>1</ID>
+```
+
+### extractvalue
+
+```sql
+SELECT extractvalue(XMLType('<a><b>100</b></a>'), '/a/b') FROM dual;
+--  extractvalue
+-- --------------
+--  100
+```
+
+### existsnode
+
+```sql
+SELECT existsnode(XMLType('<a><b>d</b></a>'), '/a/b') FROM dual;
+--  existsnode
+-- ------------
+--           1
+```
+
+### deletexml
+
+```sql
+SELECT deletexml(
+  XMLType('<test><value>oldnode</value><value>oldnode</value></test>'),
+  '/test/value'
+) FROM dual;
+--  deletexml
+-- -----------
+--  <test/>
+```
+
+### appendchildxml
+
+```sql
+SELECT appendchildxml(
+  XMLType('<test><value></value><value></value></test>'),
+  '/test/value',
+  XMLType('<name>newnode</name>')
+) FROM dual;
+```
+
+### updatexml
+
+```sql
+SELECT updatexml(
+  XMLType('<value>one</value>'),
+  '/value',
+  XMLType('<newvalue>1111</newvalue>')
+) FROM dual;
+--  updatexml
+-- ---------------------------
+--  <newvalue>1111</newvalue>
+```
+
+### insertxmlbefore
+
+```sql
+SELECT insertxmlbefore(
+  XMLType('<a>222<b>100</b><b>200</b></a>'),
+  '/a/b',
+  XMLType('<c>88</c>')
+) FROM dual;
+```
+
+### insertxmlafter
+
+```sql
+SELECT insertxmlafter(
+  XMLType('<a><b>100</b></a>'),
+  '/a/b',
+  XMLType('<c>88</c>')
+) FROM dual;
+```
+
+### xmlisvalid
+
+```sql
+SELECT xmlisvalid(XMLType('<a>'));
+--  xmlisvalid
+-- ------------
+--  f
+
+SELECT xmlisvalid(XMLType('<a/>'));
+--  xmlisvalid
+-- ------------
+--  t
+```

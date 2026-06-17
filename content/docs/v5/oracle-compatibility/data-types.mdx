@@ -1,0 +1,185 @@
+---
+title: Data Types & Built-in Functions
+description: Oracle-compatible data types and built-in functions available in IvorySQL.
+---
+
+# Data Types & Built-in Functions
+
+IvorySQL provides Oracle-compatible data types and a comprehensive set of built-in functions so that Oracle applications can run with minimal changes.
+
+## Built-in Data Types
+
+| Type | Description |
+|---|---|
+| `char` | Fixed-length character string |
+| `varchar` | Variable-length character string |
+| `varchar2` | Oracle-compatible variable-length string |
+| `number` | Oracle-compatible numeric type |
+| `binary_float` | Single-precision floating point |
+| `binary_double` | Double-precision floating point |
+| `date` | Date and time |
+| `timestamp` | Timestamp without time zone |
+| `timestamp with time zone` | Timestamp with time zone |
+| `timestamp with local time zone` | Timestamp in session time zone |
+| `interval year to month` | Year-month interval |
+| `interval day to second` | Day-time interval |
+| `raw` | Raw binary data |
+| `long` | Large character data (legacy) |
+
+## Built-in Functions
+
+### Date and Time Functions
+
+| Function | Description |
+|---|---|
+| `sysdate` | Current system date |
+| `systimestamp` | Current system date and time with microseconds and time zone |
+| `add_months(date, n)` | Add n months to a date |
+| `last_day(date)` | Last day of the month |
+| `next_day(date, day)` | Next occurrence of a given day |
+| `months_between(date1, date2)` | Months between two dates |
+| `current_date` | Current date in session time zone |
+| `current_timestamp` | Current date and time with time zone |
+| `localtimestamp` | Session date and time (no time zone) |
+| `new_time(date, tz1, tz2)` | Convert date between time zones |
+| `tz_offset(tz)` | Time zone offset |
+| `trunc(date)` | Truncate date to specified precision |
+| `to_date(string)` | Convert string to date |
+| `to_timestamp(string)` | Convert string to timestamp |
+| `to_timestamp_tz(string)` | Convert string to timestamp with time zone |
+| `to_yminterval(string)` | Convert string to year-month interval |
+| `to_dsinterval(string)` | Convert string to day-second interval |
+| `numtodsinterval(n, unit)` | Convert number to day-second interval |
+| `numtoyminterval(n, unit)` | Convert number to year-month interval |
+| `from_tz(timestamp, tz)` | Attach time zone to timestamp |
+| `sys_extract_utc(timestamptz)` | Convert to UTC |
+| `sessiontimezone` | Current session time zone |
+
+### String Functions
+
+| Function | Description |
+|---|---|
+| `instr(string, pattern)` | Find position of substring |
+| `instrb(string, pattern)` | Find position in bytes |
+| `substr(string, start)` | Extract substring by characters |
+| `substrb(string, start)` | Extract substring by bytes |
+| `trim(string)` | Remove leading and trailing spaces |
+| `ltrim(string)` | Remove leading spaces |
+| `rtrim(string)` | Remove trailing spaces |
+| `length(string)` | Character length |
+| `lengthb(string)` | Byte length |
+| `replace(string, from, to)` | Replace characters |
+| `regexp_replace(string, pattern, replacement)` | Regex-based replacement |
+| `regexp_substr(string, pattern)` | Regex-based extraction |
+| `regexp_instr(string, pattern)` | Regex-based position |
+| `regexp_like(column, pattern)` | Regex-based matching |
+| `asciistr(string)` | Convert to ASCII representation |
+| `to_multi_byte(string)` | Convert to full-width characters |
+| `to_single_byte(string)` | Convert to half-width characters |
+| `compose(string)` | Compose Unicode character |
+| `decompose(string)` | Decompose Unicode character |
+
+### Conversion Functions
+
+| Function | Description |
+|---|---|
+| `to_number(string, format)` | Convert string to number |
+| `to_char(date_or_number, format)` | Convert to character |
+
+### Other Functions
+
+| Function | Description |
+|---|---|
+| `rawtohex(raw)` | Convert raw to hex |
+| `hextoraw(string)` | Convert hex string to raw |
+| `uid` | Database instance ID |
+| `userenv(context)` | Current user environment info |
+| `sys_context(namespace, param)` | Context parameter value |
+
+## Usage Examples
+
+### sysdate
+
+```sql
+SELECT sysdate() FROM dual;
+--  sysdate
+-- ------------
+--  2023-07-06
+
+SELECT sysdate() - 1 FROM dual;
+--  ?column?
+-- ------------
+--  2023-07-05
+```
+
+### add_months
+
+```sql
+SELECT add_months(sysdate(), 1) FROM dual;
+--  add_months
+-- ------------
+--  2023-08-06
+
+SELECT add_months(sysdate(), -1) FROM dual;
+--  add_months
+-- ------------
+--  2023-06-06
+```
+
+### instr
+
+```sql
+SELECT INSTR('database administration', 'data') FROM dual;
+--  instr
+-- -------
+--      1
+
+SELECT INSTR('database administration', 'i', 1, 2) FROM dual;
+--  instr
+-- -------
+--     15
+
+-- Reverse search
+SELECT INSTR('mississippi river', 's', -5, 2) FROM dual;
+--  instr
+-- -------
+--      6
+
+-- Returns 0 when not found
+SELECT INSTR('database administration', 'z') FROM dual;
+--  instr
+-- -------
+--      0
+```
+
+### to_char
+
+```sql
+SELECT to_char(sysdate(), 'mm/dd/yyyy') FROM dual;
+--  to_char
+-- ------------
+--  07/10/2023
+```
+
+### to_number
+
+```sql
+SELECT to_number('-34,338,492', '99,999,999') FROM dual;
+--  to_number
+-- -----------
+--  -34338492
+
+SELECT to_number('5.01-', '9.99S') FROM dual;
+--  to_number
+-- -----------
+--  -5.01
+```
+
+### sys_context
+
+```sql
+SELECT sys_context('USERENV', 'DB_NAME');
+--  sys_context
+-- -------------
+--  ivorysql
+```

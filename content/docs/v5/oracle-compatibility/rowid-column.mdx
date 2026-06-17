@@ -1,0 +1,72 @@
+---
+title: RowID Column
+description: Use the Oracle-compatible ROWID pseudo-column to identify and address rows in a table.
+---
+
+# RowID Column
+
+ROWID is a pseudo-column automatically available in Oracle that returns the address of each row in a table. IvorySQL provides Oracle-compatible ROWID support with the following characteristics:
+
+- Uniquely identifies each row logically.
+- Allows quick querying and modification of other columns via ROWID.
+- Cannot be inserted or modified directly.
+- Users control whether the feature is enabled.
+
+## Enabling ROWID
+
+There are three ways to enable ROWID:
+
+### Method 1: GUC Parameter
+
+Set `ivorysql.default_with_rowids` to `on`:
+
+```sql
+SHOW ivorysql.default_with_rowids;
+--  ivorysql.default_with_rowids
+-- ------------------------------
+--  off
+
+SET ivorysql.default_with_rowids = on;
+```
+
+Once enabled, all new tables automatically include a ROWID column.
+
+### Method 2: WITH ROWID Clause
+
+Add `WITH ROWID` when creating a specific table:
+
+```sql
+CREATE TABLE t(a int);
+\d+ t
+--  Table "public.t"
+--  Column | Type
+-- --------+-----------------
+--  a      | pg_catalog.int4
+--  Access method: heap
+
+CREATE TABLE t2(a int) WITH ROWID;
+\d+ t2
+--  Table "public.t2"
+--  Column | Type
+-- --------+-----------------
+--  a      | pg_catalog.int4
+--  Indexes: "t2_16432_rowid_idx" btree (rowid)
+--  Has ROWID: yes
+```
+
+### Method 3: ALTER TABLE
+
+Add or remove ROWID on an existing table:
+
+```sql
+CREATE TABLE t3(a int);
+
+-- Add ROWID
+ALTER TABLE t3 SET WITH ROWID;
+\d+ t3;
+--  Table "public.t3"
+--  Has ROWID: yes
+
+-- Remove ROWID
+ALTER TABLE t3 SET WITHOUT ROWID;
+```

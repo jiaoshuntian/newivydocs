@@ -1,0 +1,35 @@
+---
+title: SYS_GUID
+description: Generate unique 16-byte identifiers using Oracle-compatible SYS_GUID function.
+---
+
+# SYS_GUID
+
+`sys_guid()` generates a 16-byte, database-level unique identifier (raw value). It is Oracle's equivalent of a GUID/UUID generator.
+
+## Usage
+
+```sql
+SELECT sys_guid() FROM dual;
+--               sys_guid
+-- ------------------------------------
+--  \x3ed9426c8a093442a38bea09a74f44a1
+```
+
+## Using as a Primary Key Default
+
+You can use `sys_guid()` as the default value for a primary key column:
+
+```sql
+CREATE TABLE student (
+  student_id raw(16) DEFAULT sys_guid() PRIMARY KEY,
+  student_name varchar2(100) NOT NULL
+);
+```
+
+When inserting new rows, the primary key is automatically populated:
+
+```sql
+INSERT INTO student(student_name) VALUES ('Steven');
+-- student_id is set automatically by sys_guid()
+```

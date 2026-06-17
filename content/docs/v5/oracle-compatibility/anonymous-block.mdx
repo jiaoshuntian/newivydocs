@@ -1,0 +1,64 @@
+---
+title: Anonymous Block
+description: Execute PL/iSQL code dynamically without creating a persistent database object.
+---
+
+# Anonymous Block
+
+Anonymous blocks let you write and execute PL/iSQL procedural code on the fly, without storing it as a named function or procedure in the database catalog. This is the Oracle-compatible equivalent of PL/SQL anonymous blocks.
+
+## How It Works
+
+An anonymous block is parsed and executed immediately by the server. It goes through the client tool (psql), the frontend, and the backend — just like any other statement — but unlike a function or procedure, it is not persisted in the system directory.
+
+## Syntax
+
+Use the `DO` command with a dollar-quoted string, terminated with a forward slash (`/`):
+
+```sql
+DO $$
+DECLARE
+  -- variable declarations
+BEGIN
+  -- executable statements
+END;
+$$ LANGUAGE plisql;
+/
+```
+
+## Examples
+
+### Simple anonymous block
+
+```sql
+DO $$
+DECLARE
+  i integer := 10;
+BEGIN
+  RAISE NOTICE '%', i;
+END;
+$$ LANGUAGE plisql;
+/
+-- NOTICE:  10
+```
+
+### Block with CASE and exception handling
+
+```sql
+DO $$
+DECLARE
+  grade CHAR(1);
+BEGIN
+  grade := 'B';
+  CASE grade
+    WHEN 'A' THEN RAISE NOTICE 'Excellent';
+    WHEN 'B' THEN RAISE NOTICE 'Very Good';
+  END CASE;
+EXCEPTION
+  WHEN CASE_NOT_FOUND THEN
+    RAISE NOTICE 'No such grade';
+END;
+$$ LANGUAGE plisql;
+/
+-- NOTICE:  Very Good
+```

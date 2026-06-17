@@ -1,0 +1,189 @@
+---
+title: CALL INTO
+description: Use the Oracle-compatible CALL statement with INTO clause to capture function return values.
+---
+
+# CALL INTO
+
+IvorySQL extends the `CALL` statement with an `INTO` clause, allowing you to invoke functions and capture their return values directly into host variables — just like Oracle.
+
+## Features
+
+- **Standalone and packaged** — CALL works with standalone functions, stored procedures, and those defined within packages.
+- **INTO clause** — Functions can use `INTO` to store results in host variables.
+- **Parentheses required** — When calling functions/procedures with no parameters or all default values, empty parentheses `()` cannot be omitted.
+- **Bind variables** — CALL supports bind variables (`:name`) in both parameters and the `INTO` clause.
+- **Type and precision validation** — OUT parameter bindings validate precision and data types.
+- **No duplicate binding** — Output binding variables cannot be bound more than once.
+
+## Examples
+
+### CALL INTO with a Function
+
+```sql
+-- Create function
+CREATE OR REPLACE FUNCTION f_defs(a number DEFAULT 1314)
+RETURN number IS
+BEGIN
+  RAISE NOTICE '%', a;
+  RETURN a;
+END;
+/
+
+-- Declare bind variable
+VARIABLE x number;
+
+-- Call the function and capture the return value
+CALL f_defs() INTO :x;
+-- NOTICE: 1314
+-- Call completed.
+
+PRINT x;
+--   X
+-- ------
+--  1314
+```
+
+### Call a Stored Procedure in a Package
+
+```sql
+CREATE TABLE tb1(c1 int);
+
+CREATE OR REPLACE PACKAGE pkg IS
+  var1 integer;
+  PROCEDURE test_p;
+END;
+/
+
+CREATE OR REPLACE PACKAGE BODY pkg IS
+  PROCEDURE test_p IS
+  BEGIN
+    INSERT INTO tb1 VALUES(1);
+  END;
+BEGIN
+  var1 := 2;
+END;
+/
+
+CALL pkg.test_p();
+-- CALL
+
+SELECT * FROM tb1;
+--  c1
+-- -----
+--   1
+```
+
+### Functions with Default Parameters
+
+Empty parentheses are required even when all parameters have defaults:
+
+```sql
+CREATE OR REPLACE FUNCTION default_arg_func(p_num NUMBER DEFAULT 100)
+RETURN NUMBER AS
+BEGIN
+  RETURN p_num + 5;
+END;
+/
+
+VARIABLE default_result NUMBER;
+
+-- Must include () even with all defaults
+CALL default_arg_func() INTO :default_result;
+-- Call completed.
+PRINT default_result;
+--  DEFAULT_RESULT
+-- ----------------
+--              105
+
+-- With explicit parameter
+CALL default_arg_func(200) INTO :default_result;
+PRINT default_result;
+--  DEFAULT_RESULT
+-- ----------------
+--              205
+```
+
+### Using Bind Variables
+
+```sql
+CREATE OR REPLACE FUNCTION stand_alone_func(p_input NUMBER)
+RETURN NUMBER IS
+BEGIN
+  RETURN p_input * 2;
+END;
+/
+
+VARIABLE input_num NUMBER = 7;
+VARIABLE func_result NUMBER;
+
+CALL stand_alone_func(:input_num) INTO :func_result;
+-- Call completed.
+
+PRINT func_result;
+--  FUNC_RESULT
+-- -------------
+--           14
+```
+
+### OUT Parameter Validation
+
+```sql
+CREATE OR REPLACE PROCEDURE out_param_proc(
+  p_in IN VARCHAR2,
+  p_out OUT VARCHAR2,
+  p_num_out OUT NUMBER
+) AS
+BEGIN
+  p_out := p_in || ' processed';
+  p_num_out := LENGTH(p_in);
+END;
+/
+
+-- Test type matching
+VARIABLE out_var VARCHAR2(50);
+VARIABLE num_var NUMBER;
+
+CALL out_param_proc('Test input', :out_var, :num_var);
+-- Call completed.
+
+PRINT out_var;
+--        OUT_VAR
+-- ----------------------
+--  Test input processed
+
+PRINT num_var;
+--  NUM_VAR
+-- ---------
+--       10
+
+-- Insufficient precision gets truncated
+VARIABLE short_out VARCHAR2(5);
+CALL out_param_proc('Long input string', :short_out, :num_var);
+PRINT short_out;
+--  SHORT_OUT
+-- -----------
+--  Long
+
+-- Type mismatch throws an error
+VARIABLE wrong_type NUMBER;
+CALL out_param_proc('Test', :wrong_type, :num_var);
+-- ERROR: invalid input syntax for type numeric: "Test processed"
+```
+
+### No Duplicate Binding
+
+```sql
+-- This fails: same variable bound as both IN and OUT
+VARIABLE dup_var VARCHAR2(100);
+CALL out_param_func('Test', :dup_var) INTO :dup_var;
+-- ERROR: output parameter cannot be a duplicate bind
+
+-- Correct: use different variables
+VARIABLE out1 VARCHAR2(100);
+CALL out_param_proc('Correct usage', :out1, :num_var);
+PRINT out1;
+--           OUT1
+-- -------------------------
+--  Correct usage processed
+```

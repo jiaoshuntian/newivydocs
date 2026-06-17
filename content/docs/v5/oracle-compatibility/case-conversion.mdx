@@ -1,0 +1,114 @@
+---
+title: Case Conversion
+description: Control how identifier case is handled when using Oracle compatibility mode.
+---
+
+# Case Conversion
+
+IvorySQL provides three case conversion modes for quoted identifiers, controlled by the GUC parameter `ivorysql.identifier_case_switch`. This lets you manage case sensitivity between PostgreSQL and Oracle conventions.
+
+## Conversion Modes
+
+### `normal` (default)
+
+Letters inside double-quoted identifiers are left unchanged. `"NORMAL_1"` and `"Normal_1"` are different tables.
+
+### `interchange`
+
+- All-uppercase quoted identifiers are converted to lowercase.
+- All-lowercase quoted identifiers are converted to uppercase.
+- Mixed-case identifiers remain unchanged.
+
+### `lowercase`
+
+- All-uppercase quoted identifiers are converted to lowercase.
+- Mixed-case identifiers remain unchanged.
+
+## Setting the Mode
+
+You can set the mode at cluster initialization or at runtime.
+
+### At initialization
+
+Add the `-C` option to `initdb`:
+
+```bash
+# Equivalent to "interchange" (value 1)
+initdb -D ../data -C interchange
+
+# Other values:
+#   normal      — "0"
+#   interchange — "1"
+#   lowercase   — "2"
+```
+
+### At runtime
+
+```sql
+SET ivorysql.enable_case_switch = true;
+SET ivorysql.identifier_case_switch = interchange;
+```
+
+## Examples
+
+### Normal mode
+
+```sql
+SET ivorysql.compatible_mode TO oracle;
+SET ivorysql.enable_case_switch = true;
+SET ivorysql.identifier_case_switch = normal;
+
+CREATE TABLE "NORMAL_1"(c1 int, c2 int);
+CREATE TABLE "Normal_2"(c1 int, c2 int);
+CREATE TABLE "normal_3"(c1 int, c2 int);
+
+-- Exact match works
+SELECT * FROM "NORMAL_1";
+--  c1 | c2
+
+-- Case-sensitive: different cases fail
+SELECT * FROM "Normal_1";
+-- ERROR: relation "Normal_1" does not exist
+
+-- Unquoted identifiers are lowercased by PG convention
+SELECT * FROM NORMAL_1;
+-- ERROR: relation "normal_1" does not exist
+```
+
+### Interchange mode
+
+```sql
+SET ivorysql.identifier_case_switch = interchange;
+
+CREATE TABLE "INTER_CHANGE_1"(c1 int, c2 int);
+
+-- All-uppercase quoted name is converted to lowercase internally,
+-- so unquoted access works:
+SELECT * FROM INTER_CHANGE_1;
+--  c1 | c2
+
+-- Mixed case remains unchanged
+CREATE TABLE "Inter_Change_2"(c1 int, c2 int);
+SELECT * FROM "Inter_Change_2";
+--  c1 | c2
+```
+
+### Lowercase mode
+
+```sql
+SET ivorysql.identifier_case_switch = lowercase;
+
+CREATE TABLE "LOWER_CASE_1"(c1 int, c2 int);
+
+-- All-uppercase becomes lowercase
+SELECT * FROM "lower_case_1";
+--  c1 | c2
+
+SELECT * FROM LOWER_CASE_1;
+--  c1 | c2 (unquoted → lowercase by PG convention, matches)
+
+-- Mixed case unchanged
+CREATE TABLE "Lower_Case_2"(c1 int, c2 int);
+SELECT * FROM "Lower_Case_2";
+--  c1 | c2
+```
