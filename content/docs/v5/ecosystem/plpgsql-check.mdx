@@ -1,0 +1,97 @@
+---
+title: plpgsql_check
+description: Static code analysis and linting for PL/pgSQL stored procedures and functions.
+---
+
+# plpgsql_check
+
+When writing stored procedures and functions in PL/pgSQL, it is often difficult to discover potential issues — syntax errors, type mismatches, undefined variables — before runtime. Traditional approaches require waiting until the function is actually executed to catch these errors, increasing debugging costs and risking production failures.
+
+plpgsql_check is a static code analysis tool (linter) specifically designed for PL/pgSQL. It performs deep checks on stored procedure and function source code without executing them, proactively identifying:
+
+- Syntax errors
+- Type mismatches
+- Unused variables
+- Performance problems
+- Security vulnerabilities
+
+This helps developers ensure code correctness and robustness during the development phase.
+
+## Installation
+
+<Callout type="info">
+These steps assume Ubuntu 24.04 (x86_64) with IvorySQL v5+ installed at `/usr/local/ivorysql/ivorysql-5`.
+</Callout>
+
+<Steps>
+
+### Step 1: Download and build
+
+Download the [2.8.3 source package](https://github.com/okbob/plpgsql_check/releases/tag/v2.8.3):
+
+```bash
+tar xvf plpgsql_check-2.8.3.tar.gz
+cd plpgsql_check-2.8.3
+export PATH=/usr/local/ivorysql/ivorysql-5/bin/:$PATH
+make USE_PGXS=1 clean
+make USE_PGXS=1 all
+sudo make USE_PGXS=1 install
+```
+
+</Steps>
+
+## Enable and Verify
+
+```sql
+CREATE EXTENSION plpgsql_check;
+
+SELECT * FROM pg_available_extensions WHERE name = 'plpgsql_check';
+```
+
+Expected output:
+
+```
+     name      | default_version | installed_version |                      comment
+---------------+-----------------+-------------------+---------------------------------------------------
+ plpgsql_check | 2.8             | 2.8               | extended check for plpgsql functions
+(1 row)
+```
+
+## Usage
+
+### Checking a Single Function
+
+Create a sample function with intentional issues:
+
+```sql
+CREATE OR REPLACE FUNCTION test_function(p_id integer)
+RETURNS text AS $$
+DECLARE
+    v_name text;
+    v_unused integer;  -- Unused variable
+BEGIN
+    SELECT name INTO v_name FROM users WHERE id = p_id;
+    RETURN v_naem;  -- Spelling error
+END;
+$$ LANGUAGE plpgsql;
+```
+
+Run the check:
+
+```sql
+SELECT * FROM plpgsql_check_function('test_function(integer)');
+```
+
+Output:
+
+```
+                    plpgsql_check_function
+--------------------------------------------------------------
+ error:42601:7:assignment:target variable "v_naem" is undefined
+ warning:00000:4:DECLARE:unused variable "v_unused"
+(2 rows)
+```
+
+## Further Reading
+
+For more detailed usage methods and advanced features, see the [plpgsql_check official documentation](https://github.com/okbob/plpgsql_check).

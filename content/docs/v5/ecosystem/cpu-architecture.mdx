@@ -1,0 +1,23 @@
+---
+title: CPU Architecture Support
+description: IvorySQL supports x86_64, aarch64, mips64el, and loongarch64 CPU architectures.
+---
+
+# CPU Architecture Support
+
+IvorySQL is built to run on a wide range of CPU architectures, covering mainstream server processors as well as domestically produced chips. The following table summarizes the supported architectures and the corresponding processor brands:
+
+| Architecture | Compatible Brands |
+|---|---|
+| x86_64 | Intel, AMD, ZHAOXIN, HYGON |
+| aarch64 | Phytium, Kunpeng |
+| mips64el | Loongson 3000, Loongson 4000 |
+| loongarch64 | Loongson 5000 |
+
+## Download Packages
+
+Pre-built packages are available for each architecture from the [IvorySQL releases page](https://github.com/IvorySQL/IvorySQL/releases). Each release includes both `.deb` and `.rpm` packages for the architectures listed above.
+
+<Callout type="info">
+If your target architecture is not listed, you can always build IvorySQL from source. See the [Build from Source](/docs/v5/deploy/install-source) guide for instructions.
+</Callout>

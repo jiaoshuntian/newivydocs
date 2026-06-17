@@ -1,0 +1,114 @@
+---
+title: pg_cron
+description: Schedule recurring tasks like data cleanup and maintenance directly inside IvorySQL.
+---
+
+# pg_cron
+
+Running periodic tasks in a database — such as `VACUUM` or deleting old data — is a common requirement. While you could configure external `cron` jobs, managing separate daemons becomes impractical for managed services or containers. Additionally, external cron jobs are not failover-aware.
+
+pg_cron is an open-source scheduled task extension that lets you set up cron-style scheduling directly within the database. It stores cron jobs in tables, and periodic tasks automatically fail over with the PostgreSQL server.
+
+Typical use cases: data cleanup, aggregation, health checks, executing stored procedures, and custom functions.
+
+## Installation
+
+<Callout type="info">
+These steps assume Ubuntu 24.04 (x86_64) with IvorySQL v5+ installed at `/usr/local/ivorysql/ivorysql-5`.
+</Callout>
+
+<Steps>
+
+### Step 1: Clone and build
+
+```bash
+git clone https://github.com/citusdata/pg_cron.git
+cd pg_cron
+export PATH=/usr/local/ivorysql/ivorysql-5/bin/:$PATH
+make
+make install
+```
+
+### Step 2: Configure ivorysql.conf
+
+Add the following to your `ivorysql.conf`:
+
+```ini
+# Shared preload extensions
+shared_preload_libraries = 'pg_cron'
+
+# Specify task metadata storage database (defaults to current database)
+cron.database_name = 'ivorysql'
+
+# Maximum number of concurrent tasks allowed
+cron.max_running_jobs = 5
+```
+
+### Step 3: Restart the instance
+
+```bash
+pg_ctl restart -D ./data -l logfile
+```
+
+### Step 4: Create the extension
+
+```sql
+CREATE EXTENSION pg_cron;
+
+SELECT * FROM pg_available_extensions WHERE name = 'pg_cron';
+```
+
+Expected output:
+
+```
+   name  | default_version | installed_version |         comment
+---------+-----------------+-------------------+---------------------------
+ pg_cron | 1.6             |                   | Job scheduler for PostgreSQL
+(1 row)
+```
+
+</Steps>
+
+## Core Functionality
+
+### Creating Scheduled Tasks
+
+```sql
+SELECT cron.schedule(
+    'nightly-data-cleanup',                -- Task name (unique identifier)
+    '0 3 * * *',                           -- Cron expression (daily at UTC 3:00)
+    $$DELETE FROM logs
+      WHERE created_at < now() - interval '30 days'$$  -- SQL to execute
+);
+```
+
+Cron expression quick reference:
+
+| Expression | Meaning |
+|---|---|
+| `0 * * * *` | Every hour on the hour |
+| `*/15 * * * *` | Every 15 minutes |
+| `0 9 * * 1-5` | Weekdays at 9 AM |
+| `0 1 1 * *` | 1 AM on the 1st of every month |
+
+pg_cron also supports `$` to represent the last day of the month.
+
+### Task Management
+
+```sql
+-- View all tasks
+SELECT * FROM cron.job;
+
+-- View task execution history
+SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
+
+-- Delete a task
+SELECT cron.unschedule('nightly-data-cleanup');
+
+-- Pause a task
+UPDATE cron.job SET active = false WHERE jobname = 'delete-job-run-details';
+```
+
+## Further Reading
+
+For more details, see the [pg_cron documentation](https://github.com/citusdata/pg_cron).

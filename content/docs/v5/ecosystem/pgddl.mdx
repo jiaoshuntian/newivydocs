@@ -1,0 +1,71 @@
+---
+title: pgddl (DDL Extractor)
+description: Extract DDL statements from the system catalog for version management, CI/CD, and structural auditing.
+---
+
+# pgddl (DDL Extractor)
+
+pgddl is a SQL function extension for PostgreSQL that generates clear, formatted SQL DDL (Data Definition Language) scripts directly from the database system catalog — such as `CREATE TABLE` or `ALTER FUNCTION`. It solves the problem that PostgreSQL natively lacks a `SHOW CREATE TABLE` command, letting you obtain object creation statements in pure SQL without external tools like `pg_dump`.
+
+## Key Features
+
+- **SQL-only operation** — no external tools or client software required.
+- **Flexible filtering** — use standard `WHERE` clauses to select specific objects.
+- **Dependency-aware** — intelligently handles object dependencies to generate complete scripts including `DROP` and `CREATE` steps.
+
+This makes pgddl ideal for database change management, upgrade script writing, and structural auditing.
+
+<Callout type="warn">
+pgddl (ddlx) is still under development and may not yet cover all PostgreSQL object types and advanced options. Always review generated scripts in a non-production environment first.
+</Callout>
+
+## Installation
+
+The IvorySQL installation package already includes pgddl. If you installed IvorySQL via the official package, you can use pgddl without manual installation.
+
+### Source Installation
+
+<Callout type="info">
+These steps assume Ubuntu 24.04 (x86_64) with IvorySQL v5+ installed at `/usr/local/ivorysql/ivorysql-5`.
+</Callout>
+
+<Steps>
+
+### Step 1: Download the source
+
+```bash
+git clone https://github.com/lacanoid/pgddl
+cd pgddl
+```
+
+### Step 2: Build and install
+
+```bash
+make PG_CONFIG=/path/to/pg_config          # e.g. /usr/local/ivorysql/ivorysql-5/bin/pg_config
+make PG_CONFIG=/path/to/pg_config install
+```
+
+</Steps>
+
+## Enable and Verify
+
+Connect to the database with `psql` and execute:
+
+```sql
+CREATE EXTENSION ddlx;
+
+SELECT * FROM pg_available_extensions WHERE name = 'ddlx';
+```
+
+Expected output:
+
+```
+ name | default_version | installed_version |         comment
+------+-----------------+-------------------+-------------------------
+ ddlx | 0.31            | 0.31              | DDL eXtractor functions
+(1 row)
+```
+
+## Usage
+
+For detailed usage instructions, refer to the [pgddl/ddlx official documentation](https://github.com/lacanoid/pgddl).

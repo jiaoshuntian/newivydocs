@@ -1,0 +1,78 @@
+---
+title: PostGIS
+description: Enable geospatial data support in IvorySQL with PostGIS for GIS, map services, and location analytics.
+---
+
+# PostGIS
+
+IvorySQL is fully compatible with PostgreSQL, allowing seamless integration with PostGIS for geospatial data processing, spatial indexes, and geographic object storage.
+
+## Installation
+
+PostGIS can be installed using any method from the [official PostGIS installation guide](https://postgis.net/documentation/getting_started/#installing-postgis). The IvorySQL community also provides a source code installation method, demonstrated below using Ubuntu 24.04 (x86_64).
+
+<Callout type="info">
+Ensure **IvorySQL v5 or above** is already installed in your environment.
+</Callout>
+
+### Source Code Installation
+
+<Steps>
+
+### Step 1: Install dependencies
+
+```bash
+sudo apt install \
+    docbook-xsl-ns \
+    gettext \
+    libgdal-dev \
+    libgeos-dev \
+    libjson-c-dev \
+    libproj-dev \
+    libprotobuf-c-dev \
+    libsfcgal-dev \
+    libxml2-dev \
+    libxml2-utils \
+    protobuf-c-compiler \
+    xsltproc
+```
+
+### Step 2: Download and build PostGIS
+
+```bash
+wget https://download.osgeo.org/postgis/source/postgis-3.5.4.tar.gz
+tar xvf postgis-3.5.4.tar.gz
+cd postgis-3.5.4
+./configure --with-pgconfig=/path/to/pg_config   # e.g. /usr/ivory-5/bin/pg_config
+make
+sudo make install
+```
+
+<Callout type="tip">
+If `configure` reports a PGXS error, adjust the `--with-pgconfig` parameter to match your actual IvorySQL installation path.
+</Callout>
+
+</Steps>
+
+## Enable and Verify
+
+Connect to the database with `psql` and execute:
+
+```sql
+CREATE EXTENSION postgis;
+
+SELECT * FROM pg_available_extensions WHERE name = 'postgis';
+```
+
+Expected output:
+
+```
+  name   | default_version | installed_version |                          comment
+---------+-----------------+-------------------+------------------------------------------------------------
+ postgis | 3.5.4           | 3.5.4             | PostGIS geometry and geography spatial types and functions
+(1 row)
+```
+
+## Usage
+
+For information about using PostGIS, refer to the [PostGIS 3.5 Official Documentation](https://postgis.net/docs/manual-3.5).

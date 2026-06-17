@@ -1,0 +1,18 @@
+{
+  "title": "Ecosystem",
+  "pages": [
+    "index",
+    "cpu-architecture",
+    "os-support",
+    "postgis",
+    "pgvector",
+    "pgddl",
+    "pg-cron",
+    "pgsql-http",
+    "plpgsql-check",
+    "pgroonga",
+    "pgaudit",
+    "pgrouting",
+    "system-stats"
+  ]
+}

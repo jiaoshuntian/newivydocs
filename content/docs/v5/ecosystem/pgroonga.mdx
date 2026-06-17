@@ -1,0 +1,91 @@
+---
+title: PGroonga
+description: High-performance multilingual full-text search for Chinese, Japanese, Korean, and more.
+---
+
+# PGroonga
+
+PostgreSQL has built-in full-text search, but when dealing with large-scale data, complex queries, and non-English languages (especially CJK languages like Chinese, Japanese, and Korean), its functionality and performance may not meet the requirements of high-performance applications.
+
+PGroonga addresses this by deeply integrating Groonga — a high-performance, full-featured open-source search engine — into PostgreSQL. Groonga is renowned for its extreme speed and rich functionality, particularly excelling at multilingual text. PGroonga brings these capabilities into PostgreSQL, providing a full-text search experience that far exceeds native capabilities.
+
+## Installation
+
+PGroonga is already included in the IvorySQL installation package. If you installed IvorySQL via the official released package, you can skip the installation steps.
+
+You can also choose your preferred installation method from the [PGroonga package installation page](https://pgroonga.github.io/install). The IvorySQL community provides source code installation steps below, demonstrated with PGroonga v4.0.4.
+
+### Dependencies
+
+Environment: Ubuntu 24.04, x86_64, IvorySQL v5.
+
+<Steps>
+
+### Step 1: Install msgpack-c
+
+msgpack-c (version 1.4.1 or newer) is required for WAL support (`HAVE_MSGPACK=1`):
+
+```bash
+sudo apt install libmsgpack-dev
+```
+
+### Step 2: Install Groonga
+
+Groonga version 14.0.0 or newer is required:
+
+```bash
+sudo apt install groonga libgroonga-dev
+```
+
+Verify the installation:
+
+```bash
+groonga --version
+```
+
+### Step 3: Download and compile PGroonga
+
+```bash
+wget https://packages.groonga.org/source/pgroonga/pgroonga-4.0.4.tar.gz
+tar xvf pgroonga-4.0.4.tar.gz
+cd pgroonga-4.0.4
+```
+
+Before running `make`, ensure `pg_config` is in your `PATH`:
+
+```bash
+export PGHOME=/path/to/ivorysql    # e.g. ~/work/IvorySQL/inst
+export PATH=$PGHOME/bin:$PATH
+```
+
+Then compile and install:
+
+```bash
+make HAVE_MSGPACK=1
+make install
+```
+
+</Steps>
+
+## Enable and Verify
+
+Connect to the database with `psql` in PG mode:
+
+```sql
+CREATE EXTENSION pgroonga;
+
+SELECT * FROM pg_available_extensions WHERE name = 'pgroonga';
+```
+
+Expected output:
+
+```
+   name   | default_version | installed_version |                                    comment
+----------+-----------------+-------------------+--------------------------------------------------------------------------------
+ pgroonga | 4.0.4           | 4.0.4             | Super fast and all languages supported full text search index based on Groonga
+(1 row)
+```
+
+## Usage
+
+For detailed usage instructions, refer to the [PGroonga official documentation](https://pgroonga.github.io/tutorial).

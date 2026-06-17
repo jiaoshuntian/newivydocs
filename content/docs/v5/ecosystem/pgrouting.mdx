@@ -1,0 +1,74 @@
+---
+title: pgRouting
+description: Geospatial routing computation for shortest path, TSP, and service area analysis.
+---
+
+# pgRouting
+
+pgRouting is an open-source geospatial routing extension library built on PostgreSQL and PostGIS. It endows the database with powerful network analysis capabilities, enabling complex path planning and graph theory computation — such as calculating the shortest path between two points, performing Traveling Salesman Problem (TSP) analysis, or computing service area coverage.
+
+By embedding routing algorithms directly into the database, pgRouting avoids complex data transfer and computation at the application layer. It leverages PostgreSQL's data management capabilities and PostGIS's spatial functions to perform efficient computation on spatial network data directly within the database.
+
+## Use Cases
+
+- Logistics and distribution
+- Traffic navigation
+- Network analysis
+- Urban planning
+- Supply chain management
+
+## Installation
+
+<Callout type="info">
+These steps assume IvorySQL v5+ is installed at `/usr/local/ivorysql/ivorysql-5`.
+</Callout>
+
+### Prerequisites
+
+- Perl (typically already installed with IvorySQL)
+- CMake >= 3.12
+- Boost >= 1.56
+
+<Steps>
+
+### Step 1: Install dependencies
+
+```bash
+sudo apt install cmake libboost-all-dev
+```
+
+### Step 2: Download and compile
+
+```bash
+wget https://github.com/pgRouting/pgrouting/releases/download/v3.8.0/pgrouting-3.8.0.tar.gz
+tar xvf pgrouting-3.8.0.tar.gz
+cd pgrouting-3.8.0
+mkdir build
+cd build
+cmake .. -DPOSTGRESQL_PG_CONFIG=/path/to/pg_config  # e.g. /usr/local/ivorysql/ivorysql-5/bin/pg_config
+make
+sudo make install
+```
+
+</Steps>
+
+## Enable and Verify
+
+```sql
+CREATE EXTENSION pgrouting;
+
+SELECT * FROM pg_available_extensions WHERE name = 'pgrouting';
+```
+
+Expected output:
+
+```
+   name    | default_version | installed_version |       comment
+-----------+-----------------+-------------------+---------------------
+ pgrouting | 3.8.0           |                   | pgRouting Extension
+(1 row)
+```
+
+## Usage
+
+For detailed usage instructions, refer to the [pgRouting official documentation](https://docs.pgrouting.org/).

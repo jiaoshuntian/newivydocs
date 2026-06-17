@@ -1,0 +1,74 @@
+---
+title: pgsql-http
+description: Make HTTP requests directly within SQL for API integration and data collection.
+---
+
+# pgsql-http
+
+pgsql-http is an open-source extension that lets you initiate HTTP requests directly within IvorySQL — acting as a built-in web client. It bridges the gap between the database and external web services, enabling interaction with APIs through simple SQL function calls.
+
+With this extension, you can:
+
+- Retrieve network data (`GET`), submit data (`POST`/`PUT`), update (`PATCH`), or delete (`DELETE`) remote resources in SQL queries, triggers, or stored procedures.
+- Set request headers, perform URL encoding, send JSON data, and parse response status, headers, and content.
+
+## Typical Use Cases
+
+- **Real-time data retrieval** — fetch exchange rates, weather data, or other external APIs and store results directly in tables.
+- **Trigger-based notifications** — automatically notify microservices when data changes.
+- **ETL pipelines** — clean data in the database and submit it directly to external APIs.
+
+## Installation
+
+The pgsql-http plugin is already included in the IvorySQL installation package. If you installed IvorySQL via the official package, no manual installation is needed.
+
+### Source Installation
+
+<Callout type="info">
+These steps assume Ubuntu 24.04 (x86_64) with IvorySQL v5+ installed at `/usr/local/ivorysql/ivorysql-5`.
+</Callout>
+
+<Steps>
+
+### Step 1: Install dependencies
+
+pgsql-http depends on `libcurl` development files:
+
+```bash
+sudo apt install libcurl4-openssl-dev
+```
+
+### Step 2: Download and build
+
+Download the [1.7.0 source package](https://github.com/pramsey/pgsql-http/releases/tag/v1.7.0):
+
+```bash
+tar xvf pgsql-http-1.7.0.tar.gz
+cd pgsql-http-1.7.0
+# Ensure pg_config is accessible in PATH
+make
+sudo make install
+```
+
+</Steps>
+
+## Enable and Verify
+
+```sql
+CREATE EXTENSION http;
+
+SELECT * FROM pg_available_extensions WHERE name = 'http';
+```
+
+Expected output:
+
+```
+   name    | default_version | installed_version |       comment
+-----------+-----------------+-------------------+-------------------------------------------------------------------------
+ http      | 1.7             | 1.7               | HTTP client for PostgreSQL, allows web page retrieval inside the database.
+(1 row)
+```
+
+## Usage
+
+For detailed usage instructions, refer to the [pgsql-http official documentation](https://github.com/pramsey/pgsql-http).

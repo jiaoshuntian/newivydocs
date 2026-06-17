@@ -1,0 +1,157 @@
+---
+title: pgvector
+description: Vector similarity search for AI, image retrieval, recommendation systems, and semantic search.
+---
+
+# pgvector
+
+The vector database is a key component of Generative AI (GenAI). As a major PostgreSQL extension, pgvector supports vector calculations up to 16,000 dimensions and provides powerful vector operations and indexing — transforming PostgreSQL into an efficient vector database.
+
+IvorySQL inherits this capability, and in Oracle compatibility mode, pgvector works just as well, giving Oracle users easy access to vector database features.
+
+## Indexing Algorithms
+
+pgvector provides two indexing algorithms:
+
+### IVFFLAT (Inverted File with Flat Quantization)
+
+IVFFLAT clusters similar vectors into regions and builds an inverted index mapping each region to its vectors. This allows queries to focus on a subset of the data for fast searches.
+
+- During index creation, you decide how many **lists** to include. Each list represents a "center" computed using the k-means algorithm.
+- During queries, you control how many centers to check via the `ivfflat.probes` parameter.
+- More probes means higher accuracy but slower performance — a classic trade-off between recall and speed.
+
+### HNSW (Hierarchical Navigable Small World)
+
+HNSW is a graph-based indexing algorithm consisting of multiple layers of neighborhood graphs. Upper layers are sparser with larger distances between nodes; lower layers are denser with closer nodes.
+
+- HNSW achieves high search quality and speed but at the cost of significant memory overhead, as it stores all vectors and the graph structure in memory.
+- It is a classic space-time trade-off.
+
+## Installation
+
+<Callout type="info">
+These steps assume IvorySQL v5 or above is installed at `/usr/local/ivorysql/ivorysql-5`.
+</Callout>
+
+<Steps>
+
+### Step 1: Set PG_CONFIG
+
+```bash
+export PG_CONFIG=/usr/local/ivorysql/ivorysql-5/bin/pg_config
+```
+
+### Step 2: Clone the source
+
+```bash
+git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git
+```
+
+### Step 3: Build and install
+
+```bash
+cd pgvector
+sudo --preserve-env=PG_CONFIG make
+sudo --preserve-env=PG_CONFIG make install
+```
+
+### Step 4: Create the extension
+
+```bash
+psql
+```
+
+```sql
+CREATE EXTENSION vector;
+```
+
+</Steps>
+
+## Oracle Compatibility
+
+In IvorySQL's Oracle compatibility mode, the pgvector extension works correctly. Connect via port 1521 for Oracle mode:
+
+```bash
+psql -p 1521
+```
+
+### Data Types
+
+Oracle-compatible data types like `varchar2`, `number`, and `bit` can be used alongside pgvector:
+
+```sql
+CREATE TABLE items5 (
+    id bigserial PRIMARY KEY,
+    name varchar2(20),
+    num number(20),
+    embedding bit(3)
+);
+
+INSERT INTO items5 (name, num, embedding)
+VALUES ('1st oracle data', 0, '000'), ('2nd oracle data', 111, '111');
+
+SELECT * FROM items5
+ORDER BY bit_count(embedding # '101')
+LIMIT 5;
+```
+
+### Anonymous Block
+
+```sql
+DECLARE
+    i vector(3) := '[1,2,3]';
+BEGIN
+    RAISE NOTICE '%', i;
+END;
+/
+```
+
+```
+NOTICE:  [1,2,3]
+DO
+```
+
+### Stored Procedure
+
+```sql
+CREATE OR REPLACE PROCEDURE ora_procedure()
+AS
+    p vector(3) := '[4,5,6]';
+BEGIN
+    RAISE NOTICE '%', p;
+END;
+/
+
+CALL ora_procedure();
+```
+
+```
+NOTICE:  [4,5,6]
+CALL
+```
+
+### Function
+
+```sql
+CREATE OR REPLACE FUNCTION AddVector(a vector(3), b vector(3))
+RETURN vector(3)
+IS
+BEGIN
+    RETURN a + b;
+END;
+/
+
+SELECT AddVector('[1,2,3]', '[4,5,6]') FROM DUAL;
+```
+
+```
+ addvector
+----------------
+ [5,7,9]
+(1 row)
+```
+
+## Further Reading
+
+For more usage examples, see the [pgvector documentation](https://github.com/pgvector/pgvector?tab=readme-ov-file#getting-started).
