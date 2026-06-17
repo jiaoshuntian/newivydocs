@@ -1,0 +1,43 @@
+---
+title: Release Notes
+description: What's new in IvorySQL 5.4.
+---
+
+# Release Notes
+
+## IvorySQL 5.4
+
+**Release Date:** June 17, 2026
+
+IvorySQL 5.4 is built on PostgreSQL 18.4 and includes a variety of bug fixes and new features.
+
+### New Features
+
+- **PostgreSQL 18.4 kernel upgrade** — [PR #1344](https://github.com/IvorySQL/IvorySQL/pull/1344)
+- **[IvorySQL Skills](https://github.com/IvorySQL/skills)** — AI assistant plugins for IvorySQL database expertise
+- **[Online Experience](http://trial.ivorysql.org/)** — Browser-based interactive environment [PR #10](https://github.com/IvorySQL/ivorysql-wasm/pull/10)
+- **Multi-platform packaging** — X86, ARM, MIPS, LoongArch architecture support
+- **Containerized deployment** — One-click deployment via Docker Compose, Podman, Swarm, Helm, and IvorySQL Operator
+- **IvorySQL Cloud 5.4** — Fully managed graphical control plane
+- **10 PostgreSQL extensions** — pg_cron, pgAudit, PostGIS, pgRouting, PGroonga, ddlx, pgsql-http, system_stats, plpgsql_check, pgvector
+- **Enhanced EXTRACT function** — Additional syntax support [PR #1222](https://github.com/IvorySQL/IvorySQL/pull/1222)
+
+### PostgreSQL 18.4 Upstream Fixes
+
+1. Prevent unbounded recursion while processing startup packets
+2. Fix integer overflows in memory-allocation calculations
+3. Properly quote subscription names in `pg_createsubscriber`
+4. Properly quote object names in logical replication origin checks
+5. Reject over-length options in `ts_headline()`
+6. Detect faulty input when restoring attribute MCV statistics
+
+See [PostgreSQL 18.4 release notes](https://www.postgresql.org/docs/release/18.4/) for details.
+
+### Source Code
+
+IvorySQL development is maintained across these repositories:
+
+- [Database source](https://github.com/IvorySQL/IvorySQL)
+- [Official website](https://github.com/IvorySQL/Ivory-www)
+- [Documentation](https://github.com/IvorySQL/IvorySQL_docs)
+- [Docker images](https://github.com/IvorySQL/docker_library)

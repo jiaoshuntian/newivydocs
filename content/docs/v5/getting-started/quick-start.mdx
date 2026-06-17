@@ -1,0 +1,149 @@
+---
+title: Quick Start
+description: Get IvorySQL up and running in under 5 minutes.
+---
+
+# Quick Start
+
+This guide shows you the fastest way to get IvorySQL running on your machine. You'll have a working database in under 5 minutes.
+
+## System Requirements
+
+| Parameter | Minimum | Recommended |
+|-----------|---------|-------------|
+| CPU | 4 cores | 16 cores |
+| RAM | 4 GB | 64 GB |
+| Storage | 800 MB, HDD | 5 GB+, SSD or NVMe |
+| Network | Gigabit | 10G |
+
+IvorySQL runs on Linux (CentOS 8.x, CentOS Stream 9, Ubuntu) and supports Docker.
+
+## Install on CentOS Stream 9
+
+<Steps>
+
+### Step 1: Create the yum repository
+
+Create or edit `/etc/yum.repos.d/ivorysql.repo`:
+
+```bash
+sudo vim /etc/yum.repos.d/ivorysql.repo
+```
+
+Add the following content:
+
+```ini
+[ivorysql5]
+name=IvorySQL Server 5 $releasever - $basearch
+baseurl=https://yum.highgo.com/dists/ivorysql-rpms/5/redhat/rhel-$releasever-$basearch
+enabled=1
+gpgcheck=0
+```
+
+### Step 2: Install IvorySQL
+
+```bash
+sudo dnf install -y ivorysql5-server
+```
+
+### Step 3: Set environment variables
+
+Add to `~/.bash_profile`:
+
+```bash
+PATH=/usr/ivory-5/bin:$PATH
+export PATH
+PGDATA=/usr/ivory-5/data
+export PGDATA
+```
+
+Then source the file:
+
+```bash
+source ~/.bash_profile
+```
+
+### Step 4: Initialize the database
+
+```bash
+initdb -D /usr/ivory-5/data
+```
+
+> The `-D` flag specifies where the database cluster will be stored. You can also set `PGDATA` instead (see Step 3).
+
+### Step 5: Start IvorySQL
+
+```bash
+pg_ctl -D /usr/ivory-5/data -l ivory.log start
+```
+
+### Step 6: Verify it's running
+
+```bash
+ps -ef | grep postgres
+```
+
+You should see output like:
+
+```
+ivorysql  3214  1  0 20:35 ?  00:00:00 /usr/ivory-5/bin/postgres -D /usr/ivory-5/data
+ivorysql  3215  3214  0 20:35 ?  00:00:00 postgres: checkpointer
+ivorysql  3216  3214  0 20:35 ?  00:00:00 postgres: background writer
+ivorysql  3218  3214  0 20:35 ?  00:00:00 postgres: walwriter
+```
+
+</Steps>
+
+## Install with Docker
+
+Prefer containers? Get running in one command:
+
+<Steps>
+
+### Step 1: Pull the image
+
+```bash
+docker pull ivorysql/ivorysql:latest
+```
+
+### Step 2: Run the container
+
+```bash
+docker run --name ivorysql -p 5434:5432 -e IVORYSQL_PASSWORD=your_password -d ivorysql/ivorysql:latest
+```
+
+### Step 3: Verify the container
+
+```bash
+docker ps | grep ivorysql
+```
+
+</Steps>
+
+## Connect to IvorySQL
+
+Once the database is running, connect with `psql`:
+
+```bash
+psql -d ivorysql
+```
+
+You should see:
+
+```
+psql (18.x)
+Type "help" for help.
+
+ivorysql=#
+```
+
+<Callout type="tip">
+When connecting to a Docker-based IvorySQL, use additional flags: `psql -d ivorysql -U ivorysql -h 127.0.0.1 -p 5434`
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card href="/docs/v5/getting-started/concepts" title="Core Concepts" description="Learn about dual-mode (PG/Oracle) compatibility." />
+  <Card href="/docs/v5/deploy" title="Deploy Guide" description="Explore all installation methods including YUM, APT, and source." />
+</Cards>

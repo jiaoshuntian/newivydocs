@@ -1,0 +1,87 @@
+---
+title: Core Concepts
+description: Understand IvorySQL's dual-mode architecture and compatibility features.
+---
+
+# Core Concepts
+
+IvorySQL is built on PostgreSQL and adds full Oracle compatibility through a dual-mode architecture. This page explains the key concepts you need to understand.
+
+## What is IvorySQL?
+
+IvorySQL is an advanced, full-featured, Oracle-compatible PostgreSQL distribution. It adds a GUC parameter called `ivorysql.compatible_mode` that controls the database's compatibility mode with two values:
+
+- **`oracle`** — Oracle compatibility mode (default when initializing with `-m oracle`)
+- **`pg`** — Pure PostgreSQL mode
+
+## Dual-Mode Architecture
+
+When you initialize a data directory, you specify the compatibility mode:
+
+```bash
+# Oracle compatibility mode (default if -m is omitted)
+initdb -D /usr/ivory-5/data -m oracle
+
+# PostgreSQL mode
+initdb -D /usr/ivory-5/data -m pg
+```
+
+In Oracle mode:
+- The `ivorysql.compatible_mode` parameter defaults to `oracle`
+- Some PostgreSQL-specific syntax may not be available
+- Oracle-compatible features are enabled (PL/iSQL, built-in functions, data types)
+
+In PG mode:
+- The `ivorysql.compatible_mode` parameter is disabled
+- 100% PostgreSQL syntax and function support
+- No Oracle compatibility features active
+
+<Callout type="info">
+You can switch modes at runtime with `SET ivorysql.compatible_mode TO pg`, but this only works if the data directory was initialized in Oracle mode.
+</Callout>
+
+## PL/iSQL — Oracle's PL/SQL for PostgreSQL
+
+One of IvorySQL's standout features is **PL/iSQL**, a procedural language that supports Oracle's PL/SQL syntax. This means you can migrate Oracle stored procedures to IvorySQL with minimal changes.
+
+## The ivorysql_ora Plugin
+
+IvorySQL implements Oracle-compatible features through the `ivorysql_ora` plugin, which is bound to the kernel and provides:
+
+- Built-in Oracle functions
+- Oracle data types
+- System views
+- Merge operations
+- Additional GUC parameters
+
+New compatibility features are continuously added via this plugin architecture.
+
+## Key Compatibility Features
+
+IvorySQL supports these Oracle-compatible capabilities:
+
+- Case conversion (automatic case handling)
+- `LIKE` operator (Oracle-style pattern matching)
+- Anonymous blocks
+- Functions and stored procedures (PL/iSQL)
+- Oracle built-in data types and functions
+- XML functions
+- Sequences
+- Oracle packages (DBMS_*, UTL_*)
+- Invisible columns
+- RowID columns
+- OUT parameters
+- `%TYPE` and `%ROWTYPE`
+- NLS parameters
+- Force view
+- Nested subfunctions
+- `sys_guid()` function
+- Empty string to NULL conversion
+- `CALL INTO` syntax
+
+## Next Steps
+
+<Cards>
+  <Card href="/docs/v5/getting-started/quick-start" title="Quick Start" description="Get IvorySQL running in under 5 minutes." />
+  <Card href="/docs/v5/oracle-compatibility" title="Oracle Compatibility" description="Deep dive into Oracle compatibility features." />
+</Cards>
