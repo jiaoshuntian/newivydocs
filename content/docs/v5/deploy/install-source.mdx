@@ -1,0 +1,108 @@
+---
+title: Build from Source
+description: Compile IvorySQL from source for full control over the build.
+---
+
+# Build from Source
+
+This guide shows you how to build IvorySQL from source. Use this method when you need full control over the build configuration or want to work with the latest development code.
+
+## Install Dependencies
+
+<Tabs>
+<Tab title="CentOS / RHEL" value="centos">
+
+```bash
+sudo dnf install -y bison readline-devel zlib-devel openssl-devel uuid-devel
+sudo dnf groupinstall -y 'Development Tools'
+```
+
+</Tab>
+<Tab title="Ubuntu / Debian" value="ubuntu">
+
+```bash
+sudo apt install -y bison libreadline-dev zlib1g-dev libssl-dev
+sudo apt install -y build-essential
+sudo apt install -y pkg-config uuid-dev
+```
+
+</Tab>
+</Tabs>
+
+## Build Steps
+
+<Steps>
+
+### Step 1: Clone the repository
+
+```bash
+git clone https://github.com/IvorySQL/IvorySQL.git
+cd IvorySQL
+git checkout -b IVORY_REL_5_STABLE origin/IVORY_REL_5_STABLE
+```
+
+### Step 2: Configure
+
+```bash
+./configure --prefix=/usr/local/ivorysql/ivorysql-5
+```
+
+The `--prefix` flag sets the installation directory.
+
+### Step 3: Compile
+
+```bash
+make
+```
+
+<Callout type="tip">
+After compilation, you can run `make check` or `make all-check-world` to test before installing.
+</Callout>
+
+### Step 4: Install
+
+```bash
+sudo make install
+```
+
+### Step 5: Set environment variables
+
+Add to `~/.bash_profile`:
+
+```bash
+PATH=/usr/local/ivorysql/ivorysql-5/bin:$PATH
+export PATH
+PGDATA=/usr/local/ivorysql/ivorysql-5/data
+export PGDATA
+```
+
+Source the file:
+
+```bash
+source ~/.bash_profile
+```
+
+### Step 6: Initialize and start
+
+```bash
+mkdir /usr/local/ivorysql/ivorysql-5/data
+initdb -D /usr/local/ivorysql/ivorysql-5/data
+pg_ctl -D /usr/local/ivorysql/ivorysql-5/data -l ivory.log start
+```
+
+</Steps>
+
+## Uninstallation
+
+```bash
+sudo make uninstall
+make clean
+sudo rm -rf /usr/local/ivorysql/ivorysql-5/
+```
+
+## Next Steps
+
+<Cards>
+  <Card href="/docs/v5/deploy/cluster" title="Cluster Setup" description="Set up streaming replication." />
+  <Card href="/docs/v5/developers/contributing" title="Contributing" description="Learn how to contribute to IvorySQL." />
+</Cards>

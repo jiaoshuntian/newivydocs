@@ -1,0 +1,158 @@
+---
+title: Cluster Setup
+description: Set up streaming replication between primary and standby IvorySQL nodes.
+---
+
+# Cluster Setup
+
+This guide walks you through building an IvorySQL cluster with streaming replication. We'll set up one primary node and one standby (async) node.
+
+## Primary Node
+
+<Steps>
+
+### Step 1: Install and start the database
+
+Follow one of the [installation guides](/docs/v5/deploy) to install and start IvorySQL on the primary node.
+
+<Callout type="info">
+The primary node must be installed and **started**.
+</Callout>
+
+### Step 2: Stop the firewall
+
+```bash
+sudo systemctl stop firewalld
+```
+
+### Step 3: Configure postgresql.conf
+
+Append to `postgresql.conf`:
+
+```ini
+listen_addresses = '*'
+max_connections = 100
+wal_level = replica
+max_wal_senders = 5
+hot_standby = on
+```
+
+### Step 4: Configure pg_hba.conf
+
+Append to `pg_hba.conf`:
+
+```
+host all all 0.0.0.0/0 trust
+host replication all 0.0.0.0/0 trust
+```
+
+<Callout type="warn">
+This configuration is for demo/testing only. It disables password authentication. Configure appropriately for production.
+</Callout>
+
+### Step 5: Restart IvorySQL
+
+```bash
+pg_ctl restart
+```
+
+</Steps>
+
+## Standby Node
+
+<Steps>
+
+### Step 1: Install the database
+
+Follow one of the [installation guides](/docs/v5/deploy) to install IvorySQL on the standby node.
+
+<Callout type="info">
+The standby node needs to be installed but **not started** yet.
+</Callout>
+
+### Step 2: Stop the firewall
+
+```bash
+sudo systemctl stop firewalld
+```
+
+### Step 3: Build streaming replication
+
+Run on the **standby** node:
+
+```bash
+sudo pg_basebackup -F p -P -X fetch -R -h <primary_ip> -p <primary_port> -U ivorysql -D /usr/local/ivorysql/ivorysql-5/data
+```
+
+| Flag | Description |
+|------|-------------|
+| `-h` | Primary node hostname |
+| `-p` | Primary node TCP port (default: 5432) |
+| `-U` | Username to connect as |
+| `-D` | Output directory for the backup |
+
+### Step 4: Set environment variables
+
+Add to `~/.bash_profile`:
+
+```bash
+PATH=/usr/local/ivorysql/ivorysql-5/bin:$PATH
+export PATH
+PGDATA=/usr/local/ivorysql/ivorysql-5/data
+export PGDATA
+```
+
+Source the file:
+
+```bash
+source ~/.bash_profile
+```
+
+### Step 5: Start the standby
+
+```bash
+sudo pg_ctl -D /usr/local/ivorysql/ivorysql-5/data start
+```
+
+</Steps>
+
+## Verify the Cluster
+
+### Check replication status
+
+On the **primary** node:
+
+```bash
+ps -ef | grep postgres
+# Look for: walsender process
+```
+
+On the **standby** node:
+
+```bash
+ps -ef | grep postgres
+# Look for: walreceiver process
+```
+
+### Query replication status
+
+Connect on the primary:
+
+```sql
+SELECT * FROM pg_stat_replication;
+```
+
+You should see the standby connected with `state = streaming` and `sync_state = async`.
+
+### Test replication
+
+Create a database on the primary:
+
+```sql
+CREATE DATABASE test;
+\l
+```
+
+Then query on the standby — the `test` database should appear automatically.
+
+> Writing happens on the primary. Reading works on both primary and standby. Data syncs via streaming replication.

@@ -1,0 +1,98 @@
+---
+title: Install with YUM / DNF
+description: Install IvorySQL on CentOS Stream 9 and RHEL-compatible systems using the YUM package manager.
+---
+
+# Install with YUM / DNF
+
+This guide shows you how to install IvorySQL on CentOS Stream 9, RHEL, and compatible distributions using YUM/DNF.
+
+## Prerequisites
+
+Before starting, create a user with root privileges. All installation steps should be performed as this user (we'll use `ivorysql` as the example username).
+
+## Installation
+
+<Steps>
+
+### Step 1: Configure the YUM repository
+
+Create or edit `/etc/yum.repos.d/ivorysql.repo`:
+
+```bash
+sudo vim /etc/yum.repos.d/ivorysql.repo
+```
+
+Add the following content:
+
+```ini
+[ivorysql5]
+name=IvorySQL Server 5 $releasever - $basearch
+baseurl=https://yum.highgo.com/dists/ivorysql-rpms/5/redhat/rhel-$releasever-$basearch
+enabled=1
+gpgcheck=0
+```
+
+Save and exit.
+
+### Step 2: Install IvorySQL
+
+```bash
+sudo dnf install -y ivorysql5-server
+```
+
+### Step 3: Set environment variables
+
+Add to `~/.bash_profile`:
+
+```bash
+PATH=/usr/ivory-5/bin:$PATH
+export PATH
+PGDATA=/usr/ivory-5/data
+export PGDATA
+```
+
+Source the file:
+
+```bash
+source ~/.bash_profile
+```
+
+### Step 4: Initialize the database
+
+```bash
+initdb -D /usr/ivory-5/data
+```
+
+> The `-D` flag specifies the database cluster directory. If you set `PGDATA` (Step 3), you can omit `-D`.
+
+### Step 5: Start the service
+
+```bash
+pg_ctl -D /usr/ivory-5/data -l ivory.log start
+```
+
+### Step 6: Verify
+
+```bash
+ps -ef | grep postgres
+```
+
+</Steps>
+
+## Uninstallation
+
+<Callout type="warn">
+Make sure the service has been stopped cleanly and your data has been backed up before uninstalling.
+</Callout>
+
+```bash
+sudo dnf remove -y ivorysql5-server
+```
+
+## Next Steps
+
+<Cards>
+  <Card href="/docs/v5/deploy/cluster" title="Cluster Setup" description="Set up streaming replication." />
+  <Card href="/docs/v5/getting-started/quick-start" title="Quick Start" description="Connect and start using IvorySQL." />
+</Cards>
