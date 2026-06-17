@@ -1,34 +1,69 @@
-import { docs } from 'collections/server';
+import { docsV5, docsV4 } from 'collections/server';
 import { loader } from 'fumadocs-core/source';
 import { lucideIconsPlugin } from 'fumadocs-core/source/lucide-icons';
-import { docsContentRoute, docsImageRoute, docsRoute } from './shared';
+import { docsContentRouteV5, docsContentRouteV4, docsImageRouteV5, docsImageRouteV4, docsRouteV5, docsRouteV4 } from './shared';
 
-// See https://fumadocs.dev/docs/headless/source-api for more info
-export const source = loader({
-  baseUrl: docsRoute,
-  source: docs.toFumadocsSource(),
+// --- v5 source (active version) ---
+
+export const sourceV5 = loader({
+  baseUrl: docsRouteV5,
+  source: docsV5.toFumadocsSource(),
   plugins: [lucideIconsPlugin()],
 });
 
-export function getPageImage(page: (typeof source)['$inferPage']) {
+export function getPageImageV5(page: (typeof sourceV5)['$inferPage']) {
   const segments = [...page.slugs, 'image.png'];
 
   return {
     segments,
-    url: `${docsImageRoute}/${segments.join('/')}`,
+    url: `${docsImageRouteV5}/${segments.join('/')}`,
   };
 }
 
-export function getPageMarkdownUrl(page: (typeof source)['$inferPage']) {
+export function getPageMarkdownUrlV5(page: (typeof sourceV5)['$inferPage']) {
   const segments = [...page.slugs, 'content.md'];
 
   return {
     segments,
-    url: `${docsContentRoute}/${segments.join('/')}`,
+    url: `${docsContentRouteV5}/${segments.join('/')}`,
   };
 }
 
-export async function getLLMText(page: (typeof source)['$inferPage']) {
+export async function getLLMTextV5(page: (typeof sourceV5)['$inferPage']) {
+  const processed = await page.data.getText('processed');
+
+  return `# ${page.data.title} (${page.url})
+
+${processed}`;
+}
+
+// --- v4 source (placeholder, redirects to v5) ---
+
+export const sourceV4 = loader({
+  baseUrl: docsRouteV4,
+  source: docsV4.toFumadocsSource(),
+  plugins: [lucideIconsPlugin()],
+});
+
+export function getPageImageV4(page: (typeof sourceV4)['$inferPage']) {
+  const segments = [...page.slugs, 'image.png'];
+
+  return {
+    segments,
+    url: `${docsImageRouteV4}/${segments.join('/')}`,
+  };
+}
+
+export function getPageMarkdownUrlV4(page: (typeof sourceV4)['$inferPage']) {
+  const segments = [...page.slugs, 'content.md'];
+
+  return {
+    segments,
+    url: `${docsContentRouteV4}/${segments.join('/')}`,
+  };
+}
+
+export async function getLLMTextV4(page: (typeof sourceV4)['$inferPage']) {
   const processed = await page.data.getText('processed');
 
   return `# ${page.data.title} (${page.url})
