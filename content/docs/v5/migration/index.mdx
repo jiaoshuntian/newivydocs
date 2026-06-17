@@ -1,0 +1,514 @@
+---
+title: Data Migration
+description: Migrate from Oracle (and other databases) to IvorySQL using Ora2Pg.
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# Data Migration
+
+This guide walks you through migrating an Oracle database to IvorySQL using [Ora2Pg](https://github.com/darold/ora2pg), a free open-source tool that extracts Oracle schema and data, then generates SQL scripts compatible with IvorySQL (PostgreSQL-based).
+
+## Migration Overview
+
+Database migration transfers data from one database system to another. The source and target databases may be PostgreSQL, IvorySQL, MySQL, Oracle, SQL Server, or any combination thereof. It is a complex process that requires a thorough understanding of how both databases work.
+
+If your application is already deployed to production, you need a smooth migration strategy that maintains uninterrupted business operation with zero data loss.
+
+After migration, your system should meet these requirements:
+
+- **No data loss** -- the migrated system must fully host all data from the original system.
+- **Full functional compatibility** -- all data types, syntax, and functions must work in the new system, or have viable alternatives.
+- **Upstream/downstream compatibility** -- the migrated database must integrate seamlessly with the rest of your business system.
+- **Performance parity** -- the migrated database must perform at least as well as the original.
+
+## The Ora2Pg Tool
+
+Ora2Pg connects to your Oracle database, automatically scans and extracts its structure or data, and generates SQL scripts that can be loaded into an IvorySQL database. It can handle anything from a full reverse-engineered schema migration to selectively copying specific Oracle data.
+
+Ora2Pg consists of a Perl script (`ora2pg`) and a Perl module ([Ora2Pg.pm](https://github.com/darold/ora2pg/blob/master/lib/Ora2Pg.pm)). The only configuration required is editing `ora2pg.conf` with the Oracle connection DSN and an optional schema name. You then specify which object types to export: tables (including constraints and indexes), views, materialized views, tablespaces, sequences, triggers, grants, functions, procedures, packages, partitions, types, INSERT or COPY data, FDW, queries, Kettle, and synonyms.
+
+By default, Ora2Pg exports to an SQL file that you execute via `psql`. You can also configure the target database DSN to import data directly from Oracle into IvorySQL.
+
+### Supported Object Types
+
+| Object | Supported | Notes |
+|--------|-----------|-------|
+| View | Yes | |
+| Trigger | Yes | In some cases, manual script modification needed |
+| Sequence | Yes | |
+| Function | Yes | |
+| Procedure | Yes | In some cases, manual script modification needed |
+| Type | Yes | In some cases, manual script modification needed |
+| Materialized View | Yes | In some cases, manual script modification needed |
+
+## Install Ora2Pg and Dependencies
+
+### Environment
+
+The example below uses:
+
+| Component | Version |
+|-----------|---------|
+| OS | CentOS Stream 9 |
+| Oracle | 19.0.0.0 |
+| IvorySQL | 4.2 |
+
+### Step 1: Install Perl
+
+```bash
+dnf install -y perl perl-ExtUtils-CBuilder perl-ExtUtils-MakeMaker
+perl -v
+
+# This is perl 5, version 16, subversion 3 (v5.16.3) ...
+```
+
+### Step 2: Install the DBI Module
+
+DBI (Database Independent Interface) is the Perl interface for connecting to databases.
+
+Download: https://cpan.metacpan.org/authors/id/T/TI/TIMB/DBI-1.643.tar.gz
+
+```bash
+tar zxvf DBI-1.643.tar.gz
+cd DBI-1.643/
+perl Makefile.PL
+make
+make install
+```
+
+### Step 3: Install DBD-Oracle
+
+Download: https://sourceforge.net/projects/ora2pg/
+
+Set the `ORACLE_HOME` environment variable before building. This example configures it under the `ivorysql` user:
+
+```bash
+export ORACLE_HOME=/usr/lib/oracle/18.3/client64
+source /home/postgres/.bashrc
+
+tar -zxvf DBD-Oracle-1.76.tar.gz
+cd DBD-Oracle-1.76
+perl Makefile.PL
+make
+make install
+```
+
+### Step 4: Install DBD-Pg (Optional)
+
+Download: https://metacpan.org/release/DBD-Pg/
+
+```bash
+export POSTGRES_HOME=/opt/ivorysql/3.2
+source /home/ivorysql/.bashrc
+
+tar -zxvf DBD-Pg-3.80.tar.gz
+cd DBD-Pg-3.8.0
+perl Makefile.PL
+make
+make install
+```
+
+### Step 5: Install Ora2Pg
+
+Download: https://sourceforge.net/projects/ora2pg/
+
+```bash
+tar -xjf ora2pg-24.0.tar.bz2
+cd ora2pg-xx/
+perl Makefile.PL PREFIX=<your_install_dir>
+make && make install
+```
+
+The default installation directory is `/usr/local/bin/`.
+
+Set the `PERL5LIB` environment variable:
+
+```bash
+export PERL5LIB=<your_install_dir>
+# or, if installed to default location:
+# export PERL5LIB=/usr/local/bin/
+```
+
+### Verify the Installation
+
+Create a verification script to check all installed Perl modules:
+
+```perl
+#!/usr/bin/perl
+use strict;
+use ExtUtils::Installed;
+my $inst = ExtUtils::Installed->new();
+my @modules = $inst->modules();
+foreach (@modules) {
+    my $ver = $inst->version($_) || "???";
+    printf("%-12s --  %s\n", $_, $ver);
+}
+exit;
+```
+
+Run it:
+
+```bash
+perl check.pl
+
+# DBD::Oracle  --  1.76
+# DBD::Pg      --  3.8.0
+# DBI          --  1.643
+# Ora2Pg       --  24.0
+# Perl         --  5.16.3
+```
+
+## Migrate from Oracle to IvorySQL
+
+### Prepare the Source Database
+
+Update Oracle statistics to improve Ora2Pg scanning performance:
+
+```sql
+BEGIN
+  DBMS_STATS.GATHER_SCHEMA_STATS('SH');
+  DBMS_STATS.GATHER_SCHEMA_STATS('SCOTT');
+  DBMS_STATS.GATHER_SCHEMA_STATS('HR');
+  DBMS_STATS.GATHER_DATABASE_STATS;
+  DBMS_STATS.GATHER_DICTIONARY_STATS;
+END;
+/
+```
+
+Query the object types present in the source schemas:
+
+```sql
+SET pagesize 200;
+SELECT DISTINCT OBJECT_TYPE
+FROM dba_objects
+WHERE OWNER IN ('SH','SCOTT','HR');
+
+-- OBJECT_TYPE
+-- -------------------
+-- INDEX PARTITION
+-- TABLE PARTITION
+-- SEQUENCE
+-- PROCEDURE
+-- LOB
+-- TRIGGER
+-- DIMENSION
+-- MATERIALIZED VIEW
+-- TABLE
+-- INDEX
+-- VIEW
+```
+
+### Configure Ora2Pg
+
+Ora2Pg reads `/etc/ora2pg/ora2pg.conf` by default. If the file exists, you can simply run `ora2pg`.
+
+Create a clean configuration file:
+
+```bash
+cat /etc/ora2pg/ora2pg.conf.dist | grep -v ^# | grep -v ^$ > ora2pg.conf
+```
+
+Example configuration for exporting the `SH` schema:
+
+```
+ORACLE_HOME     /opt/oracle/product/19c/dbhome_1
+ORACLE_DSN      dbi:Oracle:host=localhost;sid=ORCLCDB;port=1521
+ORACLE_USER     system
+ORACLE_PWD      oracle
+SCHEMA          SH
+EXPORT_SCHEMA   1
+SKIP            fkeys ukeys checks
+TYPE            TABLE,VIEW,GRANT,SEQUENCE,TABLESPACE,PROCEDURE,TRIGGER,FUNCTION,PACKAGE,PARTITION,TYPE,MVIEW,QUERY,DBLINK,SYNONYM,DIRECTORY,TEST,TEST_VIEW
+NLS_LANG        AMERICAN_AMERICA.UTF8
+OUTPUT          sh.sql
+```
+
+<Callout type="warn">
+**Important notes about the TYPE directive:**
+
+1. Only one type of export can be executed at a time, so the TYPE instruction must be unique. If you specify multiple TYPE lines, only the last one will be used. However, you can export multiple types by providing a comma-separated list (as shown above).
+2. When using a comma-separated list of export types, you **cannot** use COPY or INSERT alongside other export types.
+3. Some export types require manual editing after export -- especially GRANT, TABLESPACE, TRIGGER, FUNCTION, PROCEDURE, TYPE, QUERY, and PACKAGE, particularly when they contain PL/SQL code or Oracle-specific SQL.
+4. For TABLESPACE, ensure the file paths exist on the target system. For SYNONYM, verify that the owner and schema of objects correspond to your new PostgreSQL database design.
+5. **Recommended:** export one type at a time to avoid errors cascading across object types.
+</Callout>
+
+### Test the Connection
+
+```bash
+ora2pg -t SHOW_VERSION -c config/ora2pg.conf
+
+# Oracle Database 19c Enterprise Edition Release 19.0.0.0.0
+```
+
+### Estimate Migration Cost
+
+Ora2Pg can analyze your Oracle database and generate a migration cost report. It checks all database objects, functions, and stored procedures to detect items that cannot be automatically converted.
+
+```bash
+ora2pg -t SHOW_REPORT --estimate_cost -c ora2pg.conf
+```
+
+The report includes a migration level assessment:
+
+- **A** -- Migration that might run automatically
+- **B** -- Migration with code rewrite, up to 5 human-days
+- **C** -- Migration with code rewrite, more than 5 human-days
+
+Technical levels range from 1 (trivial: no stored functions or triggers) to 5 (difficult: stored functions/triggers requiring code rewriting).
+
+### Export Schema
+
+```bash
+ora2pg -c ora2pg.conf
+```
+
+Ora2Pg will display progress for each object type it exports:
+
+```
+[========================>] 11/11 tables (100.0%) end of scanning.
+[========================>] 12/12 tables (100.0%) end of table export.
+[========================>] 1/1 views (100.0%) end of output.
+[========================>] 56/56 partitions (100.0%) end of output.
+[========================>] 2/2 materialized views (100.0%) end of output.
+...
+```
+
+### Export User Data
+
+Create a separate configuration file for data export, setting the TYPE to `COPY` or `INSERT`:
+
+```bash
+cp ora2pg.conf sh_data.conf
+```
+
+```
+ORACLE_HOME       /usr/lib/oracle/18.3/client64
+ORACLE_DSN        dbi:Oracle:host=10.85.10.6;sid=PROD1;port=1521
+ORACLE_USER       system
+ORACLE_PWD        oracle
+SCHEMA            SH
+EXPORT_SCHEMA     1
+DISABLE_UNLOGGED  1
+SKIP              fkeys ukeys checks
+TYPE              COPY
+NLS_LANG          AMERICAN_AMERICA.UTF8
+OUTPUT            sh_data.sql
+```
+
+Run the data export:
+
+```bash
+ora2pg -c sh_data.conf
+
+# [========================>] 11/11 tables (100.0%) end of scanning.
+# [========================>] 1063384/1063384 total rows (100.0%) - (45 sec., avg: 23630 recs/sec).
+```
+
+You can verify the exported files:
+
+```bash
+ls -lrt *.sql
+
+# -rw-r--r-- 1 root root    15716 TABLE_sh.sql
+# -rw-r--r-- 1 root root      858 VIEW_sh.sql
+# -rw-r--r-- 1 root root     2026 TABLESPACE_sh.sql
+# -rw-r--r-- 1 root root      345 SEQUENCE_sh.sql
+# -rw-r--r-- 1 root root     2382 GRANT_sh.sql
+# -rw-r--r-- 1 root root 55281235 sh_data.sql
+# ...
+```
+
+Repeat the same process for HR and SCOTT user data.
+
+## Prepare the Target IvorySQL Database
+
+### Create the Database
+
+```bash
+su - ivorysql
+createdb orcl
+psql
+```
+
+```sql
+ivorysql=# \l
+
+--              List of databases
+--    Name    |  Owner   | Encoding  | ...
+-- -----------+----------+-----------+...
+--  ivorysql  | ivorysql | SQL_ASCII | ...
+--  orcl      | ivorysql | SQL_ASCII | ...
+--  postgres  | ivorysql | SQL_ASCII | ...
+```
+
+### Create Users
+
+```sql
+\c orcl
+
+CREATE USER sh WITH PASSWORD 'sh';
+CREATE USER hr WITH PASSWORD 'hr';
+CREATE USER scott WITH PASSWORD 'scott';
+```
+
+## Import the Migration
+
+### Import Table Structure
+
+<Steps>
+1. If your export includes materialized views, the generated SQL file contains indexes for those views. These will fail if the materialized view does not yet exist. Remove the materialized view index statements from the table SQL file and create them separately after the materialized views are imported.
+
+```sql
+CREATE INDEX fw_psc_s_mv_chan_bix ON fweek_pscat_sales_mv (channel_id);
+CREATE INDEX fw_psc_s_mv_promo_bix ON fweek_pscat_sales_mv (promo_id);
+CREATE INDEX fw_psc_s_mv_subcat_bix ON fweek_pscat_sales_mv (prod_subcategory);
+CREATE INDEX fw_psc_s_mv_wd_bix ON fweek_pscat_sales_mv (week_ending_day);
+```
+
+You may also need to set up text search configuration:
+
+```sql
+CREATE TEXT SEARCH CONFIGURATION en (COPY = pg_catalog.english);
+ALTER TEXT SEARCH CONFIGURATION en ALTER MAPPING FOR hword, hword_part, word WITH unaccent, english_stem;
+```
+
+2. Import the table structure:
+
+```bash
+psql orcl -f TABLE_sh.sql
+```
+
+3. Grant ownership and permissions:
+
+```bash
+psql orcl -f GRANT_sh.sql
+```
+
+4. Import the materialized view structure (requires relevant query permissions):
+
+```bash
+psql orcl sh -f MVIEW_sh.sql
+```
+
+5. Import the views:
+
+```bash
+psql orcl -f VIEW_sh.sql
+```
+
+6. Import the partition tables:
+
+```bash
+psql orcl -f PARTITION_sh.sql
+```
+</Steps>
+
+### Import Data
+
+```bash
+psql orcl -f sh_data.sql
+```
+
+The output will show `COPY` operations for each table:
+
+```
+SET
+COPY 0
+SET
+COPY 4500
+SET
+COPY 1826
+COMMIT
+```
+
+## Data Validation
+
+After the import, verify data integrity by comparing row counts between the source Oracle database and the target IvorySQL database.
+
+```sql
+-- Oracle (source)
+SELECT count(*) FROM sh.products;
+--   COUNT(*)
+-- ----------
+--         72
+
+-- IvorySQL (target)
+SELECT count(*) FROM sh.products;
+--  count
+-- -------
+--     72
+```
+
+```sql
+-- Oracle
+SELECT count(*) FROM sh.channels;
+--         5
+
+-- IvorySQL
+SELECT count(*) FROM sh.channels;
+--     5
+```
+
+```sql
+-- Oracle
+SELECT count(*) FROM sh.customers;
+--     55500
+
+-- IvorySQL
+SELECT count(*) FROM sh.customers;
+--  55500
+```
+
+Repeat this validation for all tables to ensure complete data transfer.
+
+## Generate a Migration Project Template
+
+Ora2Pg can generate a complete project template that contains the working tree, configuration files, and scripts for exporting and importing all objects from an Oracle database. This is useful for repeatable, automated migrations.
+
+```bash
+mkdir -p /ora2pg/migration
+
+ora2pg --project_base /ora2pg/migration/ --init_project test_project
+```
+
+This creates a structured project directory:
+
+```
+/ora2pg/migration/test_project/
+├── schema/
+│   ├── dblinks/
+│   ├── directories/
+│   ├── functions/
+│   ├── grants/
+│   ├── mviews/
+│   ├── packages/
+│   ├── partitions/
+│   ├── procedures/
+│   ├── sequences/
+│   ├── synonyms/
+│   ├── tables/
+│   ├── tablespaces/
+│   ├── triggers/
+│   ├── types/
+│   └── views/
+├── sources/
+│   ├── functions/
+│   ├── mviews/
+│   ├── packages/
+│   ├── partitions/
+│   ├── procedures/
+│   ├── triggers/
+│   ├── types/
+│   └── views/
+├── data/
+├── config/
+└── reports/
+```
+
+The template also generates:
+
+- A generic configuration file
+- `export_schema.sh` -- automates all exports
+- `import_all.sh` -- automates all imports
