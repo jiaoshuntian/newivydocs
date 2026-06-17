@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 
+// Phase 1: single-option placeholder. Add more versions when Phase 2 ships v4 content.
 const VERSIONS = [
   { label: 'v5 (latest)', value: 'v5' },
 ];

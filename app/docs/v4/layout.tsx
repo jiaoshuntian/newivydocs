@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
-export default function V4Layout({ children }: { children: React.ReactNode }) {
+export default function V4Layout() {
   redirect('/docs/v5');
 }

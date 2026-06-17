@@ -38,6 +38,8 @@ ${processed}`;
 }
 
 // --- v4 source (placeholder, redirects to v5) ---
+// These helpers are reserved for Phase 2 when v4 ships real content.
+// Currently all /docs/v4/* routes redirect to /docs/v5.
 
 export const sourceV4 = loader({
   baseUrl: docsRouteV4,
