@@ -1,0 +1,20 @@
+---
+title: sys_guid() Implementation
+description: Random unique identifier generation using uuid-ossp, uuid-e2fs, or arc4random fallback for Oracle-compatible GUID generation.
+---
+
+# sys_guid() Implementation
+
+IvorySQL's `sys_guid()` generates and returns a 16-byte database-level unique identifier (raw value), compatible with Oracle's `SYS_GUID()` function.
+
+## Implementation Strategy
+
+The `sys_guid()` function is implemented by modifying the code of the `uuid-ossp` extension. To leverage various underlying UUID libraries, the following fallback logic is adopted:
+
+1. **uuid-ossp** — If the `uuid-ossp` extension exists in the system, `uuid_make()` is used.
+2. **uuid-e2fs** — If the `uuid-e2fs` library exists, `uuid_generate_random()` is used.
+3. **arc4random** — Otherwise, `arc4random()` is used as the fallback.
+
+The code was also modified so that IvorySQL can load the `uuid-ossp` extension automatically during initialization, ensuring the primary path is always available.
+
+This multi-tiered approach ensures that `sys_guid()` works regardless of which UUID libraries are available on the host system, while preferring the most robust option when multiple are present.

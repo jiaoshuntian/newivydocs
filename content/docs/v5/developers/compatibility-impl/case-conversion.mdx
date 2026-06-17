@@ -1,0 +1,55 @@
+---
+title: Case Conversion Implementation
+description: Quoted identifier case conversion modes (normal, interchange, lowercase) and the GUC parameter pipeline from initdb through backend initialization.
+---
+
+# Case Conversion Implementation
+
+To meet Oracle's quoted identifier case compatibility requirements, IvorySQL has designed three case conversion modes for quoted identifiers:
+
+- **normal** — Default PostgreSQL behavior (unquoted identifiers are lowercased).
+- **interchange** — Unquoted identifiers are uppercased for Oracle compatibility, with case-insensitive matching.
+- **lowercase** — All identifiers are forced to lowercase.
+
+## Initialization Pipeline
+
+When the `-C` parameter is passed during database initialization, `Initdb.c->main()` processes this parameter and sets the global variable `caseswitchmode`. Then `initdb` starts a `postgres` process in `-boot` mode to set up the `template1` database, passing the parameter `-C ivorysql.identifier_case_switch=caseswitchmode` to the new process.
+
+### pg_control Storage
+
+The backend process writes the `identifier_case_switch` information to the `pg_control` file:
+
+```c
+BootstrapModeMain() -> BootStrapXLOG();
+    ControlFile->dbmode = bootstrap_database_mode;
+    ControlFile->casemode = identifier_case_switch;
+    WriteControlFile();
+```
+
+### Postmaster Initialization
+
+When a user starts the database via `pg_ctl`, the `postmaster` process reads the `pg_control` file:
+
+```
+PostmasterMain() --> SetCaseGucOption() --> GetCaseSwitchModeFromControl()
+```
+
+After reading the parameter value, `SetConfigOption()` assigns the value.
+
+### Backend Process Inheritance
+
+When each new backend process starts (forked from `postmaster`), it automatically inherits the same `ivorysql.identifier_case_switch` parameter value. It processes the startup packet and, if it contains `database` or `user` parameters, applies the case conversion:
+
+```
+BackendMain() -> BackendInitialize() -> ProcessStartupPacket()
+```
+
+### SQL Statement Processing
+
+When processing user SQL statements containing identifiers, case conversion is applied. The logic is distributed across:
+
+- `SplitIdentifierString()`
+- `quoteOneName()`
+- `SplitGUCList()`
+
+These functions apply the appropriate case transformation to each identifier based on the current `identifier_case_switch` setting.

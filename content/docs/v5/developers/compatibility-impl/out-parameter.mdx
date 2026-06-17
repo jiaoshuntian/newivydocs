@@ -1,0 +1,79 @@
+---
+title: OUT Parameter Implementation
+description: Implementation of Oracle-compatible OUT parameters in functions, procedures, anonymous blocks, and the libpq interface layer.
+---
+
+# OUT Parameter Implementation
+
+IvorySQL provides Oracle-compatible OUT parameter functionality, including functions and procedures with OUT parameters, support for OUT parameters in anonymous blocks, and libpq interface support.
+
+## Functions with OUT Parameters
+
+For PL/iSQL functions, when creating a function, the system table `pg_proc` stores the total number of parameters (including OUT parameters) and their corresponding data types.
+
+Key implementation details:
+
+- In `interpret_function_parameter_list()`, which processes function parameters, the parameter mode is checked. If the mode is `IN OUT`, the parameter cannot have a default value.
+- In `make_return_stmt`, the error handling for detecting OUT parameters has been removed.
+- By modifying `FuncnameGetCandidates`, function lookup now matches all parameters, including OUT parameters.
+- During function compilation, a row variable is constructed to hold OUT parameter variables and the return value variable. The compiled function's return type (`function->fn_rettype`) is modified to `RECORDOID`.
+- During execution, `ExecInitFunc` calls the new `ExecInitFuncOutParams` function to construct OUT parameter computation nodes. The `plisql_out_param` function separates the function return value and OUT parameter values from the tuple and assigns values to the OUT parameters externally.
+
+## Support for OUT Parameters in Anonymous Blocks
+
+To support binding variables in the form of colon placeholders, `ora_scan.l` was modified to add syntax that returns `ORAPARAM` when a colon placeholder is encountered. In `ora_gram.y`, handling for `ORAPARAM` was added to the `c_expr` and `plassign_target` assignment syntax, constructing an `OraParamRef` node.
+
+New `DO + USING` syntax was added:
+
+```
+DO [ LANGUAGE lang_name ] code [USING IN | OUT | IN OUT, ...]
+```
+
+`ora_gram.y` was modified to support this syntax. The `DoStmt` structure now includes a `paramsmode` field to store a list of binding variable modes.
+
+Modifications to the PBE (Parse, Bind, Execute) process:
+
+- In `exec_parse_message`, the parameter mode is identified based on the parameter type OID passed from the application interface.
+- In `exec_bind_message`, for anonymous blocks with `DO+USING`, the parameter modes following `USING` are identified and parameter information is passed to the executor.
+
+Execution of anonymous blocks with OUT parameters:
+
+1. In `PortalStart`, for anonymous block statements, `CreateTupleDescFromParams` constructs parameter description information.
+2. A new value, `PROKIND_ANONYMOUS_BLOCK`, was added to the `PLiSQL_function` member `fn_prokind` to indicate an anonymous block.
+3. In `plisql_exec_function`, anonymous blocks with OUT parameters are evaluated. `plisql_anonymous_return_out_parameter` constructs a `PLiSQL_row` type variable for OUT parameters, and the evaluated row type variable is used as the return value.
+
+## Calling Functions with OUT Parameters via libpq
+
+The libpq interface was modified to support binding by position and by parameter name, involving changes across three layers:
+
+### SQL Layer
+
+A system function `get_parameter_description` was implemented on the server side. This function returns the relationship between variable names and their positions based on the SQL statement:
+
+```
+ivorysql=# select * from get_parameter_description('insert into t values(:x, :y);');
+ name  | position
+-------+----------
+ false |        0
+ :x    |        1
+ :y    |        2
+(3 rows)
+```
+
+### PL/iSQL Layer
+
+The PL/iSQL block adjusts the internal identification of parameters based on their position or name. For OUT parameters, a special handling of return column names is applied: if a parameter is an OUT parameter, its column name is formatted as `_column_xxx`, where `xxx` is the position of the OUT parameter.
+
+At the PL/iSQL execution layer, parameter names are converted to internal identifiers (e.g., `$number`) based on their position. When returning to the client, description information is sent to libpq, and the libpq side assigns values to OUT parameters based on these column names.
+
+### libpq Interface Layer
+
+Provides functions for preparing, binding, and executing statements, similar to corresponding OCI functions. The general calling process:
+
+1. Use `IvyHandleAlloc` to allocate statement and error handles.
+2. Call `IvyStmtPrepare` to prepare the statement.
+3. Call `IvyBindByPos` or `IvyBindByName` to bind parameters.
+4. Call `IvyStmtExecute` to execute (can be repeated).
+5. Call `IvyFreeHandle` to release handles.
+
+Additional interface functions include `Ivyconnectdb`, `Ivystatus`, `Ivyexec`, `IvyresultStatus`, `IvyCreatePreparedStatement`, `IvybindOutParameterByPos`, `IvyexecPreparedStatement`, `IvyexecPreparedStatement2`, `Ivynfields`, `Ivyntuples`, and `Ivyclear`.

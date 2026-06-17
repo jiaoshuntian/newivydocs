@@ -1,0 +1,107 @@
+---
+title: FAQ & Contributing
+description: Frequently asked questions about contributing to IvorySQL and coding guidelines.
+---
+
+# FAQ & Contributing
+
+IvorySQL is maintained by a core team of developers, but we welcome contributions from the wider community. This section covers everything you need to know about contributing code or documentation to the project.
+
+<Accordions>
+<Accordion title="How do I get started contributing to IvorySQL?">
+
+IvorySQL is developed on GitHub. To get started:
+
+1. Create a [GitHub account](https://github.com) if you do not already have one.
+2. Familiarize yourself with Git tools and workflow.
+3. Fork the [IvorySQL repository](https://github.com/IvorySQL/IvorySQL) to create your own fork.
+4. Start working on your fork and prepare pull requests.
+
+It is also recommended to follow the [developer's mailing list](https://github.com/IvorySQL/IvorySQL/discussions), as some contributions may generate detailed discussions there.
+
+</Accordion>
+<Accordion title="What license applies to my contributions?">
+
+If the code you submit is **original work**, IvorySQL will release it under the **Apache License, Version 2.0** as part of an overall IvorySQL release available to downstream consumers.
+
+If the contribution is **not original work**, you must:
+
+- Indicate the name of the license.
+- Ensure the license is similar in terms to the Apache License 2.0 (see [Category A licenses](https://www.apache.org/legal/3party.html#category-a) maintained by the Apache Software Foundation).
+- Provide proper attributions as required by the original license.
+
+Never remove licensing headers from work that is not your original creation. If you are using parts of a file that originally had a licensing header, err on the side of preserving it. If you are unsure about the licensing implications of your contribution, reach out on the developer mailing list.
+
+</Accordion>
+<Accordion title="What coding guidelines should I follow?">
+
+Your chances of getting timely feedback and having your code merged depend greatly on how granular your changes are:
+
+- **Keep changes small and focused.** If you have a larger change in mind, engage on the [developer's mailing list](https://github.com/IvorySQL/IvorySQL/discussions) first to share your proposal.
+- **Use small, self-contained commits.** Even after your proposal is validated, do the actual work as a series of small commits. This makes review easier and increases the timeliness of feedback.
+
+For **C** and **Perl** code, follow [PostgreSQL Coding Conventions](https://www.postgresql.org/docs/17/source.html) and run `pgindent` if necessary. Use `git diff --color` when reviewing your changes to avoid spurious whitespace issues.
+
+All new functionality should be covered by **regression tests**. If you are uncertain about how to test or document your work, raise the question on the [ivorysql-hackers mailing list](https://github.com/IvorySQL/IvorySQL/discussions).
+
+At minimum, always run `make installcheck-world` to ensure you are not breaking anything.
+
+</Accordion>
+<Accordion title="How do I run the test suite?">
+
+At the very minimum, run the following command before submitting your changes:
+
+```bash
+make installcheck-world
+```
+
+This ensures that your changes do not break existing functionality across the test suite.
+
+</Accordion>
+<Accordion title="Do I need to forward-port my changes to upstream PostgreSQL?">
+
+If the change you are working on touches functionality that is **common between PostgreSQL and IvorySQL**, you may be asked to forward-port it to PostgreSQL. This serves two purposes:
+
+1. It keeps reducing the delta between the two projects.
+2. It allows changes relevant to PostgreSQL to benefit from the much broader review of the upstream PostgreSQL community.
+
+In general, keep both codebases handy so you can determine whether your changes need to be forward-ported.
+
+</Accordion>
+<Accordion title="How do I submit a patch?">
+
+Once you are ready to share your work:
+
+1. Push all commits to a branch in your own **forked** repository.
+2. Send a **pull request** to the official IvorySQL repository.
+
+Your pull request should have passing validation checks before it is considered ready for peer review.
+
+</Accordion>
+<Accordion title="How does the patch review process work?">
+
+A submitted pull request with passing validation checks is available for **peer review** -- the process that ensures contributions are of high quality and align well with the project roadmap. Every community member is encouraged to review pull requests and provide feedback.
+
+The review process works as follows:
+
+- Reviewers may request modifications to your pull request. Push additional commits to the same branch; reviewers will see them automatically.
+- A review converges when it receives at least one **+1** and no **-1** votes from participants.
+- At that point, a core team member will merge your changes.
+
+**Delays are normal.** Reviewer availability varies. If you have not received feedback for a few days, add a comment asking for updates or send an email to the mailing list.
+
+</Accordion>
+<Accordion title="What if reviewers request changes?">
+
+GitHub allows you to push additional commits to the branch from which a pull request was sent. Those additional commits will be visible to all reviewers. Address each reviewer comment with a focused commit that resolves the specific issue raised.
+
+</Accordion>
+<Accordion title="Why do some commits go directly to the repository?">
+
+On occasion, core team members commit directly to the repository without going through the pull request workflow. This is reserved for **small changes only**. The rule of thumb is:
+
+- If the change touches any functionality that could result in a **test failure**, it **must** go through a pull request.
+- If the change is in a **non-functional** part of the codebase (for example, fixing a typo in a comment), core team members may commit directly.
+
+</Accordion>
+</Accordions>

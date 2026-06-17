@@ -1,0 +1,55 @@
+---
+title: Nested Subfunctions Implementation
+description: Subprocedure declarations, polymorphic template caching, variable synchronization, and execution dispatch for nested functions in PL/iSQL.
+---
+
+# Nested Subfunctions Implementation
+
+Nested subfunctions are functions or procedures defined inside another function, stored procedure, or anonymous block. The outer host is called the parent function.
+
+## Syntax Recognition
+
+### Detecting Nested Definitions
+
+When a `DECLARE` block contains a `function ... is/as begin ... end` construct, `pl_gram.y` calls `plisql_build_subproc_function()`:
+
+1. A `PLiSQL_subproc_function` entry is created in the parent `PLiSQL_function`'s `subprocfuncs[]` array to store the name, arguments, return type, and other attributes. The index `fno` serves as the subfunction identifier.
+2. `plisql_check_subprocfunc_properties()` validates the combination of declaration and definition attributes.
+
+### Datum Storage
+
+Nested subfunctions share the parent's datum table:
+
+- `PLiSQL_function->datums` — Describes variables and record fields inside the subfunction at compile time.
+- `PLiSQL_execstate->datums` — Holds the runtime values.
+
+### Polymorphic Templates
+
+If the subfunction uses polymorphic parameters, the parser stores its source code in `subprocfunc->src` and sets `has_poly_argument` to `true`, so the executor can recompile it for each distinct argument type.
+
+## Parent Recompilation
+
+- The parent `PLiSQL_function` gains a `subprocfuncs` array, each element being a `PLiSQL_subproc_function`.
+- Each `PLiSQL_subproc_function` has an optional `HTAB *poly_tab` pointer, initialized on first compilation when `has_poly_argument` is `true`. The hash key is `PLiSQL_func_hashkey` (recording `fno` and input argument types); the value is the compiled `PLiSQL_function *` execution context.
+
+## Name Resolution During Invocation
+
+1. PostgreSQL builds a `ParseState` structure during compilation. `plisql_subprocfunc_ref()` locates the parent `PLiSQL_function` through `ParseState->p_subprocfunc_hook()` and calls `plisql_ns_lookup()` to gather all `fno` values for subfunctions sharing the same name, then selects the best match based on argument count and types.
+2. When `FuncExpr` nodes are created, the subfunction call is tagged: `function_from = FUNC_FROM_SUBPROCFUNC`, `parent_func` points to the parent `PLiSQL_function`, and `funcid = fno`.
+3. In `plisql_call_handler()`, when `function_from == FUNC_FROM_SUBPROCFUNC`:
+   - For non-polymorphic subfunctions, reuse the precompiled action tree in `subprocfunc->function`.
+   - For polymorphic subfunctions, probe `poly_tab`; if there is no cached plan, call `plisql_dynamic_compile_subproc()`.
+4. Before execution, `plisql_init_subprocfunc_globalvar()` forks relevant entries from the parent's datum table so the subfunction can access the latest parent variables without polluting the parent scope. After execution, `plisql_assign_out_subprocfunc_globalvar()` writes back necessary variables.
+
+## Module Design Summary
+
+| Component | Description |
+|---|---|
+| **Grammar Extensions** | `pl_gram.y` adds productions for subprocedure declarations and nested definitions. |
+| **Polymorphic Templates** | Parser copies source into `subprocfunc->src` and sets `has_poly_argument = true`. |
+| **Parser Hooks** | `plisql_subprocfunc_ref()` plugs into `ParseState->p_subprocfunc_hook`, reusing namespace lookup. |
+| **FuncExpr Annotation** | Compiler attaches `function_from`, `parent_func`, and `fno` metadata for executor recognition. |
+| **Execution Path** | `plisql_call_handler()` dispatches to cached or dynamically compiled subfunction. |
+| **Variable Sync** | `plisql_init_subprocfunc_globalvar()` and `plisql_assign_out_subprocfunc_globalvar()` manage parent-child variable sharing. |
+| **psql Dispatch** | `psqlscan.l` adjusts `proc_func_define_level` and `begin_depth` push/pop logic to transmit nested subfunction bodies as a whole. |
+| **Return Info** | SQL layer uses callback pointers registered through `plisql_register_internal_func()` to fetch nested subfunction metadata. |

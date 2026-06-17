@@ -14,6 +14,8 @@ export function baseOptions(): BaseLayoutProps {
       { url: '/docs/v5/ecosystem', text: 'Ecosystem' },
       { url: '/docs/v5/monitor-manage', text: 'Monitor & Manage' },
       { url: '/docs/v5/migration', text: 'Data Migration' },
+      { url: '/docs/v5/developers', text: 'Developers' },
+      { url: '/docs/v5/reference', text: 'Reference' },
     ],
   };
 }

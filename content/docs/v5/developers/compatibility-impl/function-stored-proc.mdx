@@ -1,0 +1,125 @@
+---
+title: Functions and Stored Procedures Implementation
+description: PL/iSQL layer modifications for Oracle PL/SQL function and stored procedure syntax compatibility, including client tool changes, SQL layer token caching, and grammar extensions.
+---
+
+# Functions and Stored Procedures Implementation
+
+PostgreSQL supports functions and stored procedures, but there are syntax differences between PostgreSQL and Oracle. To enable Oracle PL/SQL statements to run on IvorySQL — achieving "syntax compatibility" — IvorySQL maps Oracle clauses to equivalent IvorySQL clauses where possible, or implements the syntax (without necessarily the full semantics) where no direct counterpart exists.
+
+PL/iSQL is the name of the procedural language in IvorySQL, specifically designed to be compatible with Oracle's PL/SQL. Compatibility requires modifications across the psql client tool, the SQL layer, and the PL/iSQL layer.
+
+## Client Tool (psql)
+
+Oracle's `sqlplus` tool uses a slash (`/`) to terminate functions and stored procedures. IvorySQL's `psql` must support the same syntax, meaning the conventional semicolon-based send mechanism becomes ineffective for Oracle-style function and stored procedure commands.
+
+### State Fields Added to PsqlScanStateData
+
+```c
+bool cancel_semicolon_terminator;  /* not send command when semicolon found */
+
+/* Case 1: Statements starting with << ident >> is Oracle anonymous block. */
+int     token_count;                    /* # of tokens since start */
+bool    anonymous_label_start;          /* T if the first token is "<<" */
+bool    anonymous_label_ident;          /* T if the second token is an identifier */
+bool    anonymous_label_end;            /* T if the third token is ">>" */
+
+/* Case 2: DECLARE BEGIN ... END is Oracle anonymous block syntax. */
+bool    maybe_anonymous_declare_start;  /* T if the first token is DECLARE */
+int     token_cursor_idx;               /* position of keyword CURSOR */
+
+/* Case 3: BEGIN can also be a PostgreSQL transaction statement. */
+bool    maybe_anonymous_begin_start;    /* T if the first token is BEGIN */
+```
+
+### Oracle Slash Detection
+
+A separate interface `is_oracle_slash` was added in `oracle_fe_utils/ora_psqlscan.l`:
+
+```c
+bool is_oracle_slash(PsqlScanState state, const char *line) {
+    bool result = false;
+    switch (state->start_state) {
+        case INITIAL:
+        case xqs: {
+            int len = strlen(line);
+            bool has_slash = false;
+            for (int i = 0; i < len; i++) {
+                if (line[i] == '\t' || line[i] == '\n' || line[i] == '\r' || line[i] == ' ')
+                    continue;
+                if (line[i] == '/') {
+                    if (has_slash) break;
+                    has_slash = true;
+                    continue;
+                }
+                break;
+            }
+            if (i == len && has_slash) result = true;
+        }
+        default: break;
+    }
+    return result;
+}
+```
+
+The function scans the line to detect a standalone slash, skipping whitespace and ensuring there is exactly one non-whitespace character (the slash) on the line.
+
+## SQL Layer
+
+The SQL layer must recognize the creation syntax for functions and stored procedures. This is achieved by modifying `ora_base_yylex`, which prefetches and caches tokens.
+
+### Token Cache Structure
+
+Fields added to `ora_base_yy_extra_type`:
+
+```c
+int max_pushbacks;         /* max size of cache array */
+int loc_pushback;          /* # of used tokens */
+int num_pushbacks;         /* # of cached tokens */
+int *pushback_token;       /* token number array */
+TokenAuxData *pushback_auxdata;  /* auxdata array */
+
+OraBodyStyle body_style;
+int          body_start;
+int          body_level;
+```
+
+### Token Stack Operations
+
+| Operation | Description |
+|---|---|
+| `push_back_token` | Push a token onto the cache stack |
+| `forward_token` | Advance to the next cached token |
+| `ora_internal_yylex` | Internal lexer function |
+| `internal_yylex` | Public lexer interface |
+
+When creating functions, procedures, or anonymous blocks, tokens are preread, cached into the stack, and assembled into an `SCONST` conforming to Oracle PL/SQL syntax, then sent to the PL/iSQL layer.
+
+## PL/iSQL Layer
+
+The `pl_gram.y` file was modified to achieve compatibility with PL/SQL function and stored procedure syntax, without affecting PostgreSQL's native PL/pgSQL.
+
+### DECLARE Section Compatibility
+
+The Oracle outermost block does not require the `DECLARE` keyword:
+
+```
+ora_outermost_pl_block: ora_decl_sect K_BEGIN proc_sect exception_sect K_END opt_label
+    {
+        PLiSQL_stmt_block *new = palloc0(sizeof(PLiSQL_stmt_block));
+        new->cmd_type = PLISQL_STMT_BLOCK;
+        new->lineno = plisql_location_to_lineno(@2);
+        new->stmtid = ++plisql_curr_compile->nstatements;
+        new->label = $1.label;
+        new->n_initvars = $1.n_initvars;
+        new->initvarnos = $1.initvarnos;
+        new->body = $3;
+        new->exceptions = $4;
+        check_labels($1.label, $6, @6);
+        plisql_ns_pop();
+        $$ = (PLiSQL_stmt *)new;
+    }
+;
+```
+
+The `ora_decl_sect` production handles both the presence and absence of the `DECLARE` keyword, pushing/popping the namespace and initializing variables as needed.

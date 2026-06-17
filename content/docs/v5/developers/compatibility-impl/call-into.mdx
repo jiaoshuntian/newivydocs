@@ -1,0 +1,172 @@
+---
+title: CALL INTO Implementation
+description: Client-side rewriting and server-side collaboration for CALL ... INTO binding variable support, including grammar extensions, anonymous block conversion, and interface layer modifications.
+---
+
+# CALL INTO Implementation
+
+PostgreSQL's `CALL` statement has several limitations:
+
+- Does not support the `INTO` clause.
+- Cannot call functions that return values.
+- Cannot assign results to client-side variables (Oracle's binding variables / host variables).
+
+IvorySQL implemented support for the `CALL func(...) INTO :var;` syntax, allowing users to receive function return values through binding variables (e.g., `:x`). The behavior (including precision checks and error handling) aligns with Oracle's standards.
+
+## Overall Design
+
+Since PostgreSQL/IvorySQL does not natively support direct assignment to client-side variables at the SQL level, the solution adopts a **client-side rewriting + server-side collaboration** approach:
+
+- **When the CALL statement includes binding variables** (e.g., `:x`):
+  1. The client rewrites it into a special anonymous PL block (`DO $$ ... $$`).
+  2. Sends it using the extended query protocol to transmit parameter type and precision information.
+  3. The server executes this anonymous block and returns the result.
+  4. The client writes the result to the corresponding binding variable.
+
+- **When the CALL statement does not contain binding variables**:
+  - The behavior remains fully consistent with native PostgreSQL, using the simple query protocol without any rewriting.
+
+## psql Layer
+
+To ensure compatibility with `CALL [INTO]`, the statement must be converted into an anonymous PL/iSQL block, leveraging the OUT parameter support in anonymous blocks.
+
+The `get_parameter_description` function must correctly identify CALL statements and, when encountering `CALL INTO`, return the rewritten PL statement.
+
+The `get_hostvariables` routine stores information in the `HostVariable` structure:
+
+```c
+typedef struct HostVariable {
+    HostVariableEntry *hostvars;
+    int     length;
+    bool    isdostmt;
+    bool    iscallstmt;     /* Whether it is from a CALL statement */
+    char    *convertcall;   /* Rewritten statement */
+} HostVariable;
+```
+
+## Server-Side
+
+### Grammar Rules
+
+`CALL INTO` grammar rules were added to `ora_gram.y`:
+
+```c
+CallStmt:   CALL func_application
+                {
+                    CallStmt *n = makeNode(CallStmt);
+                    n->funccall = castNode(FuncCall, $2);
+                    $$ = (Node *)n;
+                }
+        |   CALL func_application INTO ORAPARAM
+                {
+                    CallStmt *n = makeNode(CallStmt);
+                    OraParamRef *hostvar = makeNode(OraParamRef);
+                    n->funccall = castNode(FuncCall, $2);
+                    hostvar->name = $4;
+                    n->hostvariable = hostvar;
+                    callstr = pnstrdup(...);
+                    n->callinto = psprintf("%s := %s;", $4, callstr);
+                    $$ = (Node *)n;
+                }
+        ;
+```
+
+The `CallStmt` structure stores the INTO clause and the converted PL statement:
+
+```c
+typedef struct CallStmt {
+    NodeTag       type;
+    FuncCall      *funccall;
+    FuncExpr      *funcexpr;
+    List          *outargs;
+    OraParamRef   *hostvariable;
+    char          *callinto;  /* rewrite CALL INTO to a PL assign stmt */
+} CallStmt;
+```
+
+### GENERATED FROM CALL Keyword
+
+To distinguish regular DO statements from anonymous blocks converted from CALL statements, a new keyword `GENERATED FROM CALL` was added:
+
+```
+opt_do_from_where:
+    GENERATED FROM CALL   { $$ = true; }
+    | /*EMPTY*/           { $$ = false; }
+;
+```
+
+The `DoStmt` node sets `do_from_call = true`:
+
+```c
+typedef struct DoStmt {
+    NodeTag type;
+    List    *args;
+    List    *paramsmode;
+    List    *paramslen;
+    bool    do_from_call;  /* True if DoStmt comes from CallStmt */
+} DoStmt;
+```
+
+### get_parameter_description Extension
+
+The `get_parameter_description` function was extended:
+
+- A new `hint` field was added to return the rewritten PL code for `CALL INTO` statements.
+- The first field of the first tuple now returns the corresponding parse tree's `CommandTag` instead of just `true/false`.
+
+Metadata is encapsulated in a user context structure:
+
+```c
+{
+    OraParamExtralData *extral;
+    const char         *cmdtag;
+    char               *callintoexpr;
+} outparam_fctx;
+```
+
+## Interface Layer
+
+### Statement Type
+
+A new statement type `IVY_STMT_DOFROMCALL` was added:
+
+```c
+typedef enum IvyStmtType {
+    IVY_STMT_UNKNOW,
+    IVY_STMT_DO,
+    IVY_STMT_DOFROMCALL,  /* new statement type */
+    IVY_STMT_DOHANDLED,
+    IVY_STMT_OTHERS
+} IvyStmtType;
+```
+
+### Binding Order Adjustment
+
+When rewriting CALL statements, if encountering a `CALL INTO` that invokes a function, the interface internally adjusts the order of bound variables. The INTO variable appears as the left-hand side of the assignment expression in the rewritten anonymous block, so the binding order must be adjusted to match.
+
+Relevant routines:
+- `Ivyreplacenamebindtoposition`
+- `Ivyreplacenamebindtoposition2`
+- `Ivyreplacenamebindtoposition3`
+
+### Precision Handling
+
+When there is a mismatch between the precision of an output binding variable and the actual returned value:
+
+- If the type recorded in `ParamListInfo` exactly matches the formal parameter type, a forced type conversion is applied.
+- Otherwise, an implicit type conversion is used.
+
+### Example Transformation
+
+```sql
+-- Original CALL statement:
+CALL my_func(:in1, :in2) INTO :out;
+
+-- Rewritten as:
+do $$BEGIN
+  :out := my_func(:in1, :in2);
+END$$ using
+  out INOUT, in1 INOUT, in2 INOUT
+  paramslength -1,-1,-1
+GENERATED FROM CALL;
+```

@@ -1,0 +1,80 @@
+---
+title: Dual Parser Framework
+description: How IvorySQL's dual-parser framework enables simultaneous PostgreSQL and Oracle SQL parsing through dynamically loaded parser libraries and function pointer switching.
+---
+
+# Dual Parser Framework
+
+IvorySQL's dual parser framework is the foundation of its Oracle compatibility. It allows the database to parse and execute both PostgreSQL-style and Oracle-style SQL syntax, depending on the compatibility mode. The framework is divided into two main parts: the SQL-side parser and the server-side programming language parser.
+
+## SQL-Side Lexical and Syntax Separation
+
+The basic approach is to introduce a separate set of Oracle-compatible syntax and lexical rules. When Oracle compatibility is enabled, the parser follows Oracle-style syntax analysis to generate the corresponding syntax tree.
+
+### Implementation Architecture
+
+Under `src/backend/`, IvorySQL introduces an `oracle_parser` directory containing:
+
+- `ora_gram.y` — Oracle-style grammar rules (copied and modified from `src/backend/parser/gram.y`)
+- `ora_scan.l` — Oracle-style lexical scanner (copied and modified from `src/backend/parser/scan.l`)
+- `keywords.c` — Oracle-specific keywords
+
+These files are compiled into a dynamic library `libparser_oracle.so`. When Oracle compatibility is enabled, the `ivorysql.conf` file appends to `postgresql.conf`, and `liboracle_parser` is added to the `shared_preload_libraries` parameter to ensure the dynamic library loads automatically at database startup.
+
+### Parser Switching via Function Pointer
+
+A new function pointer `ora_raw_parser` is introduced. When `libparser_oracle.so` is loaded, the `_PG_init()` function assigns the address of `oracle_raw_parser()` to `ora_raw_parser`. When compatibility mode is switched, `_PG_fini()` resets `ora_raw_parser` to `NULL`.
+
+Each backend process calls `BackendInitialize()`, which sets `port->connmode` based on the connected port number:
+
+- Oracle-compatible port &rarr; `connmode = 'o'`
+- Standard PostgreSQL port &rarr; `connmode = 'p'`
+
+`PostgresMain()` then calls `InitIvorysql()`. If `port->connmode` is `'o'`, it executes:
+
+```c
+SetConfigOption("ivorysql.compatible_mode", "oracle", PGC_USERSET, PGC_S_OVERRIDE);
+```
+
+Since this parameter has an `assign_hook`, calling `SetConfigOption()` is equivalent to calling `assign_compatible_mode()`, which sets `sql_raw_parser = ora_raw_parser`.
+
+### Query Analysis Flow
+
+During SQL statement analysis, `pg_parse_query()->raw_parser()` calls either `standard_parser()` or `ora_raw_parser()` through the function pointer `sql_raw_parser`:
+
+1. Client connects on a port (Oracle or PG).
+2. `BackendInitialize()` sets `connmode` based on port.
+3. `InitIvorysql()` sets the compatibility mode GUC.
+4. `assign_compatible_mode()` assigns the appropriate parser function pointer.
+5. `raw_parser()` dispatches to the correct parser through `sql_raw_parser`.
+
+## Server-Side Programming Language Separation
+
+IvorySQL introduces a new procedural language called **PL/iSQL**, registered in the system table `pg_language`, to provide Oracle PL/SQL compatibility.
+
+### Implementation
+
+PL/iSQL is built by copying the `plpgsql` directory from the PostgreSQL source and renaming it to `plisql`:
+
+- All files are renamed to start with `plisql`.
+- Registration functions (`plpgsql_validator`, `plpgsql_call_handler`, `plpgsql_inline_handler`) are renamed to `plisql_validator`, `plisql_call_handler`, `plisql_inline_handler`.
+- All other functions in the directory are renamed with the `plisql` prefix.
+
+The `plisql` directory is built as a plugin. During `initdb`, if the database mode is Oracle, this plugin is created and registers the PL/iSQL language in the database system tables.
+
+### Lexical Rules for PL/iSQL
+
+PL/iSQL does not have its own lexical rules — it relies on the SQL side's lexical rules. For PL/iSQL, Oracle-compatible lexical rules are enforced. The main modification is in `plisql_scanner_init`, which calls `ora_scanner_init()`. The `internal_yylex()` function in the `plisql` directory calls `ora_core_yylex`.
+
+Syntax rules for PL/iSQL are defined in `plisql/src/pl_gram.y`, where Oracle-compatible PL/SQL block syntax is implemented.
+
+### Default Language Selection
+
+When creating a function on the SQL side without specifying a language:
+
+- **Oracle compatibility mode** &rarr; default language is `plisql`.
+- **PostgreSQL compatibility mode** &rarr; default language is `plpgsql`.
+
+In `ora_gram.y` (oracle_parser), the default is `plisql`; in `gram.y` (PostgreSQL parser), the default is `plpgsql`.
+
+The same logic applies to anonymous blocks. The `ExecuteDoStmt` function also determines the default language based on the compatibility mode.

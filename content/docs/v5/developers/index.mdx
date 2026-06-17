@@ -1,0 +1,47 @@
+---
+title: Developers
+description: Internal architecture, built-in function implementations, and compatibility layer details for IvorySQL developers and contributors.
+---
+
+# Developers
+
+This section covers IvorySQL's internal architecture, the implementation of built-in Oracle-compatible functions, and the design of the Oracle compatibility layer. It is intended for developers who want to understand how IvorySQL works under the hood, or for contributors looking to extend or modify the codebase.
+
+IvorySQL builds on PostgreSQL by introducing a dual-parser framework, a custom procedural language (PL/iSQL), and a comprehensive set of Oracle-compatible features — all implemented as extensions to the PostgreSQL engine.
+
+## Contributing
+
+<Cards>
+  <Card href="/docs/v5/developers/contributing" title="Contributing to IvorySQL" description="Learn how to contribute code, documentation, tests, and blog posts to the IvorySQL project." />
+</Cards>
+
+## Architecture
+
+<Cards>
+  <Card href="/docs/v5/developers/architecture/dual-parser" title="Dual Parser Framework" description="How IvorySQL's dual-parser framework enables simultaneous PostgreSQL and Oracle SQL parsing." />
+  <Card href="/docs/v5/developers/architecture/initdb" title="initdb Process" description="Database initialization flow for Oracle and PostgreSQL modes, including BKI file selection and template bootstrapping." />
+</Cards>
+
+## Built-in Functions
+
+<Cards>
+  <Card href="/docs/v5/developers/built-in-functions/sys-context" title="SYS_CONTEXT" description="Implementation of the SYS_CONTEXT function with USERENV and SYS_SESSION_ROLES namespaces." />
+  <Card href="/docs/v5/developers/built-in-functions/userenv" title="USERENV" description="Implementation of the legacy USERENV function and its parameter-to-SQL mapping." />
+</Cards>
+
+## Compatibility Implementation Details
+
+<Cards>
+  <Card href="/docs/v5/developers/compatibility-impl/like" title="LIKE Operator" description="Extending the LIKE operator to work with Oracle data types via varchar2 and implicit type conversion." />
+  <Card href="/docs/v5/developers/compatibility-impl/out-parameter" title="OUT Parameters" description="Functions, procedures, and anonymous blocks with OUT parameters, plus libpq interface support." />
+  <Card href="/docs/v5/developers/compatibility-impl/rowid" title="RowID Column" description="Oracle-compatible RowID pseudo-column using table OID and sequence-based unique identifiers." />
+  <Card href="/docs/v5/developers/compatibility-impl/type-rowtype" title="%TYPE and %ROWTYPE" description="PL/SQL data type compatibility including constraint inheritance, INSERT/UPDATE enhancements, and cache invalidation." />
+  <Card href="/docs/v5/developers/compatibility-impl/nls-parameters" title="NLS Parameters" description="Implementation of NLS GUC parameters for length semantics, date formatting, and locale settings." />
+  <Card href="/docs/v5/developers/compatibility-impl/function-stored-proc" title="Functions and Stored Procedures" description="PL/iSQL layer modifications for Oracle PL/SQL function and stored procedure syntax compatibility." />
+  <Card href="/docs/v5/developers/compatibility-impl/nested-subfunctions" title="Nested Subfunctions" description="Subprocedure declarations, polymorphic template caching, and variable synchronization in nested functions." />
+  <Card href="/docs/v5/developers/compatibility-impl/force-view" title="Force View" description="CREATE FORCE VIEW and ALTER VIEW COMPILE implementation with the pg_force_view catalog." />
+  <Card href="/docs/v5/developers/compatibility-impl/case-conversion" title="Case Conversion" description="Quoted identifier case conversion modes (normal, interchange, lowercase) and the GUC parameter pipeline." />
+  <Card href="/docs/v5/developers/compatibility-impl/sys-guid" title="sys_guid()" description="Random unique identifier generation using uuid-ossp, uuid-e2fs, or arc4random fallback." />
+  <Card href="/docs/v5/developers/compatibility-impl/empty-string-null" title="Empty String to NULL" description="Lexical analysis-time conversion of empty strings to NULL via the GUC parameter." />
+  <Card href="/docs/v5/developers/compatibility-impl/call-into" title="CALL INTO" description="Client-side rewriting and server-side collaboration for CALL ... INTO binding variable support." />
+</Cards>

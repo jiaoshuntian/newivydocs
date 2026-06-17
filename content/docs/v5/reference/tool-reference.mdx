@@ -1,0 +1,1106 @@
+---
+title: Tool Reference
+description: Reference documentation for IvorySQL client and server command-line utilities.
+---
+
+# Tool Reference
+
+This page contains reference documentation for all IvorySQL client applications and server utilities. These tools can be run on any host, independent of where the database server resides.
+
+When specified on the command line, user and database names have their case preserved -- the presence of spaces or special characters might require quoting. Table names and other identifiers do not have their case preserved, except where documented, and might require quoting.
+
+## Overview
+
+### Client Applications
+
+| Tool | Description |
+|------|-------------|
+| `clusterdb` | Recluster tables previously marked as clustered. |
+| `createdb` | Create a new IvorySQL database. |
+| `createuser` | Create a new IvorySQL role. |
+| `dropdb` | Remove an existing database. |
+| `dropuser` | Delete an existing role. |
+| `ecpg` | Preprocess C source files with embedded SQL. |
+| `pg_amcheck` | Check indexes and heap data for corruption. |
+| `pg_basebackup` | Take an online base backup over the replication protocol. |
+| `pgbench` | Run benchmark tests on an IvorySQL instance. |
+| `pg_config` | Print build-time configuration details. |
+| `pg_dump` | Back up a single database. |
+| `pg_dumpall` | Back up every database plus global objects. |
+| `pg_isready` | Check whether a server is accepting connections. |
+| `pg_receivewal` | Stream WAL segments from a running cluster. |
+| `pg_recvlogical` | Manage logical-replication slots and stream decoded changes. |
+| `pg_restore` | Restore archives produced by pg_dump. |
+| `pg_verifybackup` | Validate a base backup against its backup manifest. |
+| `psql` | Interactive terminal for running SQL. |
+| `reindexdb` | Rebuild indexes for a database, schema, or table. |
+| `vacuumdb` | Run VACUUM and ANALYZE on selected databases. |
+
+### Server Applications
+
+| Tool | Description |
+|------|-------------|
+| `initdb` | Initialize a new database cluster. |
+| `pg_archivecleanup` | Clean archived WAL files no longer needed. |
+| `pg_checksums` | Enable, disable, or verify data checksums. |
+| `pg_controldata` | Display cluster control information from pg_control. |
+| `pg_ctl` | Initialize, start, stop, or restart the server. |
+| `pg_resetwal` | Reset WAL and control fields after corruption. |
+| `pg_rewind` | Sync a diverged cluster with another timeline. |
+| `pg_test_fsync` | Benchmark wal_sync_method options. |
+| `pg_test_timing` | Measure timer resolution and detect backward time jumps. |
+| `pg_upgrade` | Upgrade between major releases using existing data files. |
+| `pg_waldump` | Read and print WAL records for debugging. |
+| `postgres` | The IvorySQL server executable. |
+
+---
+
+## Client Applications
+
+### clusterdb
+
+Recluster tables in a database by invoking the SQL `CLUSTER` command.
+
+**Synopsis**
+
+```bash
+clusterdb [connection-option...] [--verbose | -v] [--table | -t table] ... [dbname]
+clusterdb [connection-option...] [--verbose | -v] --all | -a
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--all` | Cluster all databases. |
+| `-d dbname`, `--dbname=dbname` | Database to cluster. Defaults to `PGDATABASE` or the connection user name. |
+| `-e`, `--echo` | Echo the commands sent to the server. |
+| `-q`, `--quiet` | Suppress progress messages. |
+| `-t table`, `--table=table` | Cluster only the specified table. Repeat for multiple tables. |
+| `-v`, `--verbose` | Print detailed processing information. |
+| `--maintenance-db=dbname` | Database used to discover which databases to cluster when `--all` is used. |
+
+**Environment**
+
+`PGDATABASE`, `PGHOST`, `PGPORT`, `PGUSER` -- default connection parameters. `PG_COLOR` controls color output (`always`, `auto`, `never`).
+
+**Examples**
+
+```bash
+# Cluster the database "test"
+$ clusterdb test
+
+# Cluster a single table "foo" in database "xyzzy"
+$ clusterdb --table=foo xyzzy
+```
+
+---
+
+### createdb
+
+Create a new IvorySQL database, wrapping `CREATE DATABASE`.
+
+**Synopsis**
+
+```bash
+createdb [connection-option...] [option...] [dbname [description]]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `dbname` | Name of the database to create (must be unique in the cluster). |
+| `description` | Comment for the new database. |
+| `-D tablespace`, `--tablespace=tablespace` | Default tablespace for the database. |
+| `-E encoding`, `--encoding=encoding` | Character encoding for the database. |
+| `-l locale`, `--locale=locale` | Locale setting (equivalent to `--lc-collate` and `--lc-ctype`). |
+| `--locale-provider=\{libc|icu\}` | Locale provider for default collation. |
+| `-O owner`, `--owner=owner` | User who will own the new database. |
+| `-T template`, `--template=template` | Template database to build from. |
+
+**Examples**
+
+```bash
+# Create database "demo" on the default server
+$ createdb demo
+
+# Create database "demo" on a specific server with template0
+$ createdb -p 5000 -h eden -T template0 -e demo
+CREATE DATABASE demo TEMPLATE template0;
+```
+
+---
+
+### createuser
+
+Create a new IvorySQL role, wrapping `CREATE ROLE`.
+
+**Synopsis**
+
+```bash
+createuser [connection-option...] [option...] [username]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c number`, `--connection-limit=number` | Maximum connections for the new user. |
+| `-d`, `--createdb` | Allow the new user to create databases. |
+| `-e`, `--echo` | Echo generated commands. |
+| `-g role`, `--role=role` | Add the new role as a member of the specified role. |
+| `--interactive` | Prompt for user name and options not specified on the command line. |
+| `-l`, `--login` | Allow the new user to log in (default). |
+| `-P`, `--pwprompt` | Prompt for the new user's password. |
+| `-r`, `--createrole` | Allow the new user to create roles. |
+| `-s`, `--superuser` | Make the new user a superuser. |
+| `--replication` | Grant the `REPLICATION` privilege. |
+
+**Examples**
+
+```bash
+# Create a user "joe"
+$ createuser joe
+
+# Create with interactive prompts
+$ createuser --interactive joe
+Shall the new role be a superuser? (y/n) n
+Shall the new role be allowed to create databases? (y/n) n
+
+# Create as superuser with a password
+$ createuser -P -s -e joe
+Enter password for new role: xyzzy
+CREATE ROLE joe PASSWORD 'md5...' SUPERUSER CREATEDB CREATEROLE INHERIT LOGIN;
+```
+
+---
+
+### dropdb
+
+Remove an existing IvorySQL database.
+
+**Synopsis**
+
+```bash
+dropdb [connection-option...] [option...] dbname
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-e`, `--echo` | Echo the commands sent to the server. |
+| `-f`, `--force` | Terminate all existing connections before dropping. |
+| `-i`, `--interactive` | Prompt for confirmation before dropping. |
+| `--if-exists` | Do not error if the database does not exist. |
+
+**Examples**
+
+```bash
+$ dropdb demo
+
+$ dropdb -p 5000 -h eden -i -e demo
+Database "demo" will be permanently deleted.
+Are you sure? (y/n) y
+DROP DATABASE demo;
+```
+
+---
+
+### dropuser
+
+Remove an existing IvorySQL role.
+
+**Synopsis**
+
+```bash
+dropuser [connection-option...] [option...] [username]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-e`, `--echo` | Echo generated commands. |
+| `-i`, `--interactive` | Prompt for confirmation and user name if not specified. |
+| `--if-exists` | Do not error if the user does not exist. |
+
+**Examples**
+
+```bash
+$ dropuser joe
+
+$ dropuser -p 5000 -h eden -i -e joe
+Role "joe" will be permanently removed.
+Are you sure? (y/n) y
+DROP ROLE joe;
+```
+
+---
+
+### ecpg
+
+Embedded SQL C preprocessor. Translates C source files with embedded SQL statements into standard C code that uses libpq.
+
+**Synopsis**
+
+```bash
+ecpg [option...] file...
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c` | Automatically generate C code from SQL code (for `EXEC SQL TYPE`). |
+| `-C mode` | Set compatibility mode: `INFORMIX`, `INFORMIX_SE`, or `ORACLE`. |
+| `-I directory` | Add an include directory for `EXEC SQL INCLUDE`. |
+| `-o filename` | Write output to the specified file (use `-` for stdout). |
+| `-t` | Enable autocommit of transactions. |
+| `-v` | Print additional version and include path information. |
+
+**Examples**
+
+```bash
+ecpg prog1.pgc
+cc -I/usr/local/pgsql/include -c prog1.c
+cc -o prog1 prog1.o -L/usr/local/pgsql/lib -lecpg
+```
+
+---
+
+### pg_amcheck
+
+Check one or more databases for index and heap corruption using the `amcheck` extension.
+
+**Synopsis**
+
+```bash
+pg_amcheck [option...] [dbname]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--all` | Check all databases. |
+| `-d pattern`, `--database=pattern` | Check databases matching the given pattern. |
+| `-t pattern`, `--table=pattern` | Check tables matching the given pattern. |
+| `-i pattern`, `--index=pattern` | Check indexes matching the given pattern. |
+| `-j num`, `--jobs=num` | Use `num` concurrent connections. |
+| `-P`, `--progress` | Show progress information. |
+| `-v`, `--verbose` | Print more detailed messages. |
+| `--heapallindexed` | Verify heap tuple presence in btree indexes. |
+| `--install-missing` | Install missing extensions required for checking. |
+
+---
+
+### pg_basebackup
+
+Take a base backup of an IvorySQL cluster over the replication protocol. Useful for PITR or standby seeding.
+
+**Synopsis**
+
+```bash
+pg_basebackup [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory`, `--pgdata=directory` | Target directory for the backup (required). |
+| `-F format`, `--format=format` | Output format: `plain` (default) or `tar`. |
+| `-R`, `--write-recovery-conf` | Create `standby.signal` and append connection settings. |
+| `-X method`, `--wal-method=method` | Include WAL: `none`, `fetch`, or `stream` (default). |
+| `-Z level`, `--compress=level` | Enable compression (gzip, lz4, zstd). |
+| `-c \{fast|spread\}`, `--checkpoint=\{fast|spread\}` | Checkpoint mode. |
+| `-P`, `--progress` | Enable progress reporting. |
+| `-T olddir=newdir`, `--tablespace-mapping` | Relocate tablespaces during backup. |
+
+**Examples**
+
+```bash
+# Backup from a remote server
+$ pg_basebackup -h mydbserver -D /usr/local/pgsql/data
+
+# Compressed tar backup with progress
+$ pg_basebackup -D backup -Ft -z -P
+
+# Relocate a tablespace during backup
+$ pg_basebackup -D backup/data -T /opt/ts=$(pwd)/backup/ts
+```
+
+---
+
+### pgbench
+
+Run benchmark tests (TPC-B style by default) on an IvorySQL instance.
+
+**Synopsis**
+
+```bash
+pgbench -i [option...] [dbname]    # Initialize mode
+pgbench [option...] [dbname]       # Benchmark mode
+```
+
+<Callout type="warn">
+
+`pgbench -i` creates four tables (`pgbench_accounts`, `pgbench_branches`, `pgbench_history`, `pgbench_tellers`), destroying any existing tables of these names. Use a separate database to avoid data loss.
+
+</Callout>
+
+At the default scale factor of 1, the initial tables contain:
+
+```
+table                   # of rows
+---------------------------------
+pgbench_branches        1
+pgbench_tellers         10
+pgbench_accounts        100000
+pgbench_history         0
+```
+
+**Initialization Options**
+
+| Option | Description |
+|--------|-------------|
+| `-i`, `--initialize` | Invoke initialization mode. |
+| `-s factor`, `--scale=factor` | Multiply rows by the scale factor. |
+| `-F fillfactor`, `--fillfactor=fillfactor` | Set fillfactor for benchmark tables. |
+| `--foreign-keys` | Create foreign key constraints between standard tables. |
+| `--partition-method=NAME` | Partition `pgbench_accounts` by `range` or `hash`. |
+| `--partitions=NUM` | Number of partitions for the accounts table. |
+
+**Benchmarking Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c clients`, `--client=clients` | Number of concurrent client sessions. |
+| `-t transactions`, `--transactions=transactions` | Transactions per client. |
+| `-T seconds`, `--time=seconds` | Run for this many seconds instead of fixed transactions. |
+| `-j threads`, `--jobs=threads` | Number of worker threads. |
+| `-R rate`, `--rate=rate` | Target transactions per second (throttled mode). |
+| `-L limit`, `--latency-limit=limit` | Report transactions exceeding this latency (ms). |
+| `-b scriptname`, `--builtin=scriptname` | Built-in scripts: `tpcb-like`, `simple-update`, `select-only`. |
+| `-f filename`, `--file=filename` | Run a custom transaction script. |
+| `-P sec`, `--progress=sec` | Progress report interval in seconds. |
+| `-r`, `--report-per-command` | Report per-command statistics after benchmark. |
+
+**Exit Status**
+
+`0` -- success. `1` -- static problems (invalid options, connection failure). `2` -- runtime errors (database errors, script problems).
+
+---
+
+### pg_config
+
+Retrieve information about the installed IvorySQL version.
+
+**Synopsis**
+
+```bash
+pg_config [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `--bindir` | Location of user executables. |
+| `--includedir` | Location of C client headers. |
+| `--includedir-server` | Location of server programming headers. |
+| `--libdir` | Location of object code libraries. |
+| `--pkglibdir` | Location of dynamically loadable modules. |
+| `--pgxs` | Location of extension makefiles. |
+| `--configure` | Options given to `configure` during build. |
+| `--version` | Print the IvorySQL version. |
+
+**Example**
+
+```bash
+# Reproduce the build configuration
+eval ./configure `pg_config --configure`
+```
+
+---
+
+### pg_dump
+
+Back up a single IvorySQL database into a script file or archive.
+
+**Synopsis**
+
+```bash
+pg_dump [connection-option...] [option...] [dbname]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--data-only` | Dump only data, not schema. |
+| `-c`, `--clean` | Include commands to drop objects before recreating. |
+| `-C`, `--create` | Include commands to create the database. |
+| `-e pattern`, `--extension=pattern` | Dump only matching extensions. |
+| `-f filename`, `--file=filename` | Output file. |
+| `-F format`, `--format=format` | Output format: `plain` (default), `custom`, `directory`, or `tar`. |
+| `-j njobs`, `--jobs=njobs` | Use parallel dump (directory format only). |
+| `-n schema`, `--schema=schema` | Dump only the specified schema. |
+| `-O`, `--no-owner` | Skip ownership commands in output. |
+| `-s`, `--schema-only` | Dump only schema, not data. |
+| `-t table`, `--table=table` | Dump only the specified table. |
+| `-Z level`, `--compress=level` | Compression level (0-9). |
+
+**Examples**
+
+```bash
+# Dump a database to a plain SQL file
+$ pg_dump mydb > mydb_backup.sql
+
+# Dump in custom format with compression
+$ pg_dump -Fc -Z 6 mydb > mydb.dump
+
+# Dump a single table
+$ pg_dump -t my_table mydb > table_backup.sql
+```
+
+---
+
+### pg_dumpall
+
+Back up an entire IvorySQL cluster (all databases and global objects).
+
+**Synopsis**
+
+```bash
+pg_dumpall [connection-option...] [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--data-only` | Dump only data. |
+| `-c`, `--clean` | Include DROP commands before CREATE. |
+| `-g`, `--globals-only` | Dump only global objects (roles, tablespaces). |
+| `-r`, `--roles-only` | Dump only roles. |
+| `-t`, `--tablespaces-only` | Dump only tablespaces. |
+| `-f filename`, `--file=filename` | Output file. |
+| `--quote-all-identifiers` | Force quoting of all identifiers for cross-version compatibility. |
+
+**Examples**
+
+```bash
+# Dump all databases
+$ pg_dumpall > db.out
+
+# Restore
+$ psql -f db.out postgres
+```
+
+---
+
+### pg_isready
+
+Check whether an IvorySQL server is accepting connections.
+
+**Synopsis**
+
+```bash
+pg_isready [connection-option...] [option...]
+```
+
+**Exit Status**
+
+| Code | Meaning |
+|------|--------|
+| `0` | Accepting connections normally. |
+| `1` | Rejecting connections (e.g., during startup). |
+| `2` | No response. |
+| `3` | No attempt made (invalid parameters). |
+
+**Examples**
+
+```bash
+$ pg_isready
+/tmp:5432 - accepting connections
+
+$ pg_isready -h localhost -p 5433
+localhost:5433 - rejecting connections
+```
+
+---
+
+### pg_receivewal
+
+Stream WAL segments from a running cluster via the replication protocol.
+
+**Synopsis**
+
+```bash
+pg_receivewal [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory`, `--directory=directory` | Directory to write WAL segments (required). |
+| `-S slotname`, `--slot=slotname` | Use a replication slot for tracking. |
+| `-Z level`, `--compress=level` | Compress WAL segments (gzip, lz4). |
+| `--create-slot` | Create a new physical replication slot. |
+| `--synchronous` | Flush WAL to disk immediately after receiving. |
+
+**Example**
+
+```bash
+$ pg_receivewal -h mydbserver -D /usr/local/pgsql/archive
+```
+
+---
+
+### pg_recvlogical
+
+Control logical decoding streams and manage logical replication slots.
+
+**Synopsis**
+
+```bash
+pg_recvlogical [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `--create-slot` | Create a new logical replication slot. |
+| `--drop-slot` | Drop the specified replication slot. |
+| `--start` | Begin streaming changes from the slot. |
+| `-f filename`, `--file=filename` | Output file (use `-` for stdout). |
+| `-P plugin`, `--plugin=plugin` | Output plugin to use. |
+| `-d dbname`, `--dbname=dbname` | Target database. |
+| `-S slotname`, `--slot=slotname` | Replication slot name. |
+
+---
+
+### pg_restore
+
+Restore an archive produced by `pg_dump` (non-plain formats) into a database.
+
+**Synopsis**
+
+```bash
+pg_restore [option...] [filename]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-d dbname`, `--dbname=dbname` | Restore into this database. |
+| `-c`, `--clean` | Drop objects before recreating. |
+| `-C`, `--create` | Create the database before restoring. |
+| `-e`, `--exit-on-error` | Exit on first error. |
+| `-f filename`, `--file=filename` | Write script to file instead of executing. |
+| `-j njobs`, `--jobs=njobs` | Parallel restore (directory format, custom format with `-Fd`). |
+| `-l`, `--list` | List contents of the archive. |
+| `-L list-file`, `--use-list=list-file` | Restore only selected/ordered items from the list file. |
+| `-n schema`, `--schema=schema` | Restore only objects in the specified schema. |
+| `-O`, `--no-owner` | Skip ownership commands. |
+| `-t table`, `--table=table` | Restore only the specified table. |
+| `-1`, `--single-transaction` | Wrap restore in a single transaction. |
+
+---
+
+### pg_verifybackup
+
+Validate a base backup created by `pg_basebackup` against its `backup_manifest`.
+
+**Synopsis**
+
+```bash
+pg_verifybackup [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-e`, `--exit-on-error` | Exit immediately on first problem. |
+| `-s`, `--skip-checksums` | Skip file checksum verification (faster). |
+| `-i path`, `--ignore=path` | Ignore specified file/directory during verification. |
+| `-q`, `--quiet` | Suppress output on successful verification. |
+
+**Examples**
+
+```bash
+# Create and verify a backup
+$ pg_basebackup -h mydbserver -D /usr/local/pgsql/data
+$ pg_verifybackup /usr/local/pgsql/data
+```
+
+---
+
+### psql
+
+The IvorySQL interactive terminal. Runs SQL interactively or from scripts.
+
+**Synopsis**
+
+```bash
+psql [option...] [dbname [username]]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c command`, `--command=command` | Execute a single command and exit. |
+| `-d dbname`, `--dbname=dbname` | Database to connect to (can be a connection string). |
+| `-f filename`, `--file=filename` | Execute commands from a file. |
+| `-l`, `--list` | List all databases and exit. |
+| `-p port`, `--port=port` | Port to connect to. |
+| `-U username`, `--username=username` | User to connect as. |
+| `-q`, `--quiet` | Suppress welcome and informational messages. |
+| `-1`, `--single-transaction` | Wrap all `-c`/`-f` commands in a single transaction. |
+| `-X`, `--no-psqlrc` | Skip startup configuration files. |
+| `-e`, `--echo-queries` | Echo SQL commands sent to the server. |
+| `-E`, `--echo-hidden` | Echo queries generated by `\d` commands. |
+| `-H`, `--html` | HTML output mode. |
+| `--csv` | CSV output mode. |
+
+**Exit Status**
+
+`0` -- finished normally. `1` -- fatal error. `2` -- connection lost (non-interactive). `3` -- script error with `ON_ERROR_STOP` set.
+
+---
+
+### reindexdb
+
+Rebuild indexes for a database, schema, or table.
+
+**Synopsis**
+
+```bash
+reindexdb [connection-option...] [option...] [dbname]
+reindexdb [connection-option...] [option...] --all | -a
+reindexdb [connection-option...] [option...] --system | -s [dbname]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--all` | Reindex all databases. |
+| `-t table`, `--table=table` | Reindex only the specified table. |
+| `-i index`, `--index=index` | Reindex only the specified index. |
+| `-S schema`, `--schema=schema` | Reindex only the specified schema. |
+| `-s`, `--system` | Reindex system catalogs only. |
+| `-j njobs`, `--jobs=njobs` | Execute reindex commands in parallel. |
+| `--concurrently` | Use the `CONCURRENTLY` option. |
+
+**Examples**
+
+```bash
+$ reindexdb test
+
+$ reindexdb --table=foo --index=bar abcd
+```
+
+---
+
+### vacuumdb
+
+Run `VACUUM` and `ANALYZE` on selected databases or tables.
+
+**Synopsis**
+
+```bash
+vacuumdb [connection-option...] [option...] [dbname]
+vacuumdb [connection-option...] [option...] --all | -a
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--all` | Vacuum all databases. |
+| `-f`, `--full` | Perform full vacuuming. |
+| `-F`, `--freeze` | Aggressively freeze tuples. |
+| `-z`, `--analyze` | Also calculate optimizer statistics. |
+| `-Z`, `--analyze-only` | Only calculate statistics (no vacuum). |
+| `-t table`, `--table=table` | Vacuum only the specified table. |
+| `-j njobs`, `--jobs=njobs` | Execute commands in parallel. |
+| `-P workers`, `--parallel=workers` | Number of parallel workers for index vacuuming. |
+| `--min-xid-age xid_age` | Only vacuum tables with transaction ID age above this threshold. |
+
+---
+
+## Server Applications
+
+### initdb
+
+Initialize a new database cluster by creating the data directory, catalog tables, and default databases.
+
+**Synopsis**
+
+```bash
+initdb [option...] [--pgdata | -D] directory
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory`, `--pgdata=directory` | Directory for the database cluster (required). |
+| `-E encoding`, `--encoding=encoding` | Encoding for template databases. |
+| `-k`, `--data-checksums` | Enable checksums on data pages. |
+| `-U username`, `--username=username` | Database superuser name (defaults to OS user). |
+| `-W`, `--pwprompt` | Prompt for the superuser password. |
+| `--locale=locale` | Default locale for the cluster. |
+| `--locale-provider=\{libc|icu\}` | Locale provider for databases. |
+| `-A authmethod`, `--auth=authmethod` | Default authentication method for local connections. |
+| `-X directory`, `--waldir=directory` | Directory for write-ahead log. |
+| `--wal-segsize=size` | WAL segment size in MB (power of 2, 1-1024). |
+
+**Environment**
+
+`PGDATA` -- default data directory. `TZ` -- default time zone.
+
+---
+
+### pg_archivecleanup
+
+Clean archived WAL files that are no longer needed.
+
+**Synopsis**
+
+```bash
+pg_archivecleanup [option...] archivelocation oldestkeptwalfile
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-d` | Print debug logging output. |
+| `-n` | Dry run: print names of files that would be removed. |
+| `-x extension` | Strip an extension (e.g., `.gz`) before comparing file names. |
+
+**Example**
+
+```bash
+# Use as archive_cleanup_command in standby config
+archive_cleanup_command = 'pg_archivecleanup -d /mnt/standby/archive %r 2>>cleanup.log'
+```
+
+---
+
+### pg_checksums
+
+Enable, disable, or verify cluster-wide data checksums.
+
+**Synopsis**
+
+```bash
+pg_checksums [option...] [-D | --pgdata] datadir
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-c`, `--check` | Verify checksums (default mode). |
+| `-d`, `--disable` | Disable checksums. |
+| `-e`, `--enable` | Enable checksums. |
+| `-P`, `--progress` | Show progress. |
+| `-v`, `--verbose` | List all checked files. |
+
+<Callout type="info">
+
+Enabling checksums on a large cluster can take a long time. During this operation, no other processes should write to the data directory.
+
+</Callout>
+
+---
+
+### pg_controldata
+
+Display cluster control information by reading `pg_control`.
+
+**Synopsis**
+
+```bash
+pg_controldata [option] [-D | --pgdata] datadir
+```
+
+Shows catalog version, checkpoint status, WAL status, and other cluster metadata.
+
+---
+
+### pg_ctl
+
+Initialize, start, stop, restart, or query the status of the IvorySQL server.
+
+**Synopsis**
+
+```bash
+pg_ctl init[db] [-D datadir] [-s] [-o initdb-options]
+pg_ctl start [-D datadir] [-l filename] [-W] [-t seconds] [-s] [-o options]
+pg_ctl stop [-D datadir] [-m smart|fast|immediate] [-W] [-t seconds] [-s]
+pg_ctl restart [-D datadir] [-m smart|fast|immediate] [-W] [-t seconds] [-s] [-o options]
+pg_ctl reload [-D datadir] [-s]
+pg_ctl status [-D datadir]
+pg_ctl promote [-D datadir] [-W] [-t seconds] [-s]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-D datadir`, `--pgdata=datadir` | Data directory location. |
+| `-l filename`, `--log=filename` | Append server log output to file. |
+| `-m mode`, `--mode=mode` | Shutdown mode: `smart`, `fast` (default), or `immediate`. |
+| `-o options`, `--options=options` | Options passed to `postgres`. |
+| `-w`, `--wait` | Wait for the operation to complete (default for start/stop/restart). |
+| `-W`, `--no-wait` | Do not wait for completion. |
+| `-c`, `--core-files` | Allow core dumps on crash. |
+| `-s`, `--silent` | Print only errors. |
+
+**Shutdown Modes**
+
+- **smart** -- Wait for all clients to disconnect before shutting down.
+- **fast** -- Force disconnect all clients and shut down immediately (default).
+- **immediate** -- Abort all server processes immediately; recovery will be required on next start.
+
+**Examples**
+
+```bash
+# Start the server
+$ pg_ctl start
+
+# Start with custom options
+$ pg_ctl -o "-F -p 5433" start
+
+# Stop with fast shutdown
+$ pg_ctl stop -m fast
+
+# Show status
+$ pg_ctl status
+pg_ctl: server is running (PID: 13718)
+/usr/local/pgsql/bin/postgres "-D" "/usr/local/pgsql/data" "-p" "5433"
+```
+
+---
+
+### pg_resetwal
+
+Reset the WAL and control fields after corruption so the server can start.
+
+**Synopsis**
+
+```bash
+pg_resetwal [-f | --force] [-n | --dry-run] [option...] [-D | --pgdata] datadir
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-f`, `--force` | Proceed even if unable to determine valid pg_control data. |
+| `-n`, `--dry-run` | Print reconstructed values without modifying anything. |
+
+<Callout type="info">
+
+This command must not be used when the server is running. After using `pg_resetwal`, always dump and rebuild the cluster to ensure data integrity.
+
+</Callout>
+
+---
+
+### pg_rewind
+
+Sync a diverged cluster with another timeline by copying only the changed blocks since the split.
+
+**Synopsis**
+
+```bash
+pg_rewind [option...] {-D | --target-pgdata} directory {--source-pgdata=directory | --source-server=connstr}
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory`, `--target-pgdata=directory` | Target data directory to synchronize. |
+| `--source-pgdata=directory` | Source data directory (source must be shut down). |
+| `--source-server=connstr` | Connection string to a running source server. |
+| `-R`, `--write-recovery-conf` | Create `standby.signal` and append connection settings. |
+| `-n`, `--dry-run` | Do everything except modifying the target. |
+| `-c`, `--restore-target-wal` | Use `restore_command` to retrieve missing WAL files. |
+
+**Examples**
+
+```bash
+# Rewind from a running source server
+$ pg_rewind -D /var/lib/ivorysql/data --source-server="host=primary dbname=postgres"
+
+# Rewind with recovery config
+$ pg_rewind -D /var/lib/ivorysql/data --source-server="host=primary" -R
+```
+
+---
+
+### pg_test_fsync
+
+Benchmark different `wal_sync_method` options to find the fastest durable fsync strategy.
+
+**Synopsis**
+
+```bash
+pg_test_fsync [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-f filename`, `--filename=filename` | File to write test data (should be on the same filesystem as `pg_wal`). |
+| `-s seconds`, `--secs-per-test=seconds` | Seconds per test (default: 5). |
+
+---
+
+### pg_test_timing
+
+Measure timer resolution and detect backward time jumps. Useful for interpreting `EXPLAIN ANALYZE` accuracy.
+
+**Synopsis**
+
+```bash
+pg_test_timing [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-d duration`, `--duration=duration` | Test duration in seconds (default: 3). |
+
+---
+
+### pg_upgrade
+
+Upgrade between major IvorySQL releases by reusing existing data files.
+
+**Synopsis**
+
+```bash
+pg_upgrade -b oldbindir [-B newbindir] -d oldconfigdir -D newconfigdir [option...]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-b bindir`, `--old-bindir=bindir` | Old IvorySQL executable directory. |
+| `-B bindir`, `--new-bindir=bindir` | New IvorySQL executable directory. |
+| `-d datadir`, `--old-datadir=datadir` | Old cluster data directory. |
+| `-D datadir`, `--new-datadir=datadir` | New cluster data directory. |
+| `-c`, `--check` | Check compatibility only without making changes. |
+| `-k`, `--link` | Use hard links instead of copying (faster). |
+| `--clone` | Use file cloning (reflinks) -- near-instantaneous. |
+| `-j njobs`, `--jobs=njobs` | Parallel processing for schema dump/restore. |
+| `-U username`, `--username=username` | Cluster superuser name. |
+
+**Typical Upgrade Steps**
+
+1. Build and install the new IvorySQL version.
+2. Initialize the new cluster with `initdb`.
+3. Install extension shared object files matching the new version.
+4. Stop both servers.
+5. Run `pg_upgrade --check` to verify compatibility.
+6. Run `pg_upgrade` with appropriate options.
+7. Start the new server.
+8. Run `ANALYZE` to regenerate optimizer statistics.
+9. Delete the old cluster when satisfied.
+
+**Example**
+
+```bash
+# Check mode (old server can still be running)
+$ pg_upgrade -b /opt/IvorySQL/4/bin -B /opt/IvorySQL/5/bin \
+  -d /opt/IvorySQL/4/data -D /opt/IvorySQL/5/data --check
+
+# Upgrade with link mode
+$ pg_upgrade -b /opt/IvorySQL/4/bin -B /opt/IvorySQL/5/bin \
+  -d /opt/IvorySQL/4/data -D /opt/IvorySQL/5/data --link
+```
+
+---
+
+### pg_waldump
+
+Read and print WAL records for debugging or education.
+
+**Synopsis**
+
+```bash
+pg_waldump [option...] [startseg [endseg]]
+```
+
+**Key Options**
+
+| Option | Description |
+|--------|-------------|
+| `-p path`, `--path=path` | Directory to search for WAL segment files. |
+| `-r rmgr`, `--rmgr=rmgr` | Filter by resource manager. |
+| `-R tli/db/rel`, `--relation=...` | Filter by relation OID. |
+| `-s start`, `--start=start` | WAL location to start reading. |
+| `-n limit`, `--limit=limit` | Display only the specified number of records. |
+| `-q`, `--quiet` | Suppress output (useful for validation). |
+| `-z`, `--stats[=record]` | Display summary statistics instead of individual records. |
+| `-f`, `--follow` | Keep polling for new WAL after reaching end. |
+
+---
+
+### postgres
+
+The IvorySQL server executable. Accepts client connections and forks per-session backend processes.
+
+**Synopsis**
+
+```bash
+postgres [option...]
+```
+
+**General Purpose Options**
+
+| Option | Description |
+|--------|-------------|
+| `-D datadir` | Data directory location. |
+| `-c name=value` | Set a run-time parameter. |
+| `-p port` | Port to listen on (default: 5432). |
+| `-h hostname` | Listen address for TCP/IP connections. |
+| `-k directory` | Unix-domain socket directory. |
+| `-N max-connections` | Maximum client connections. |
+| `-B nbuffers` | Shared buffers (auto-set by initdb). |
+| `-F` | Disable fsync (performance risk). |
+| `-l` | Enable SSL connections. |
+
+**Example**
+
+```bash
+# Start with custom port
+$ postgres -p 1234
+
+# Set parameters
+$ postgres -c shared_buffers=256MB -c max_connections=200
+```
+
+<Callout type="info">
+
+For normal operation, use `pg_ctl` to start and stop the server safely rather than invoking `postgres` directly.
+
+</Callout>

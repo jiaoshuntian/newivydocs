@@ -1,0 +1,252 @@
+---
+title: Contributing to IvorySQL
+description: A comprehensive guide for contributing code, documentation, tests, and blog posts to the IvorySQL project.
+---
+
+# Contributing to IvorySQL
+
+IvorySQL is maintained by a core development team and is open to contributions from the wider community. This guide covers everything you need to know to contribute — from setting up your environment to submitting your first pull request.
+
+## Principles of Conduct
+
+Every member, contributor, and leader in the IvorySQL community should follow the [principles of conduct](#). We are committed to acting and interacting in a way that contributes to an open, diverse, inclusive, and healthy community. Everyone participates on equal terms.
+
+## Community Roles
+
+The IvorySQL team is an open, continuously growing team focused on the development and maintenance of IvorySQL. The typical promotion path is:
+
+**User &rarr; Reviewer &rarr; Submitter &rarr; Maintainer**
+
+Getting more roles does not mean privileges over other community members. Everyone is equal and has the responsibility to cooperate constructively. These roles are natural rewards for significant contributions and provide you with more rights in the development workflow:
+
+- **Reviewers** — Provide feedback on pull requests.
+- **Submitters** — Have the right to merge pull requests and take responsibility for the consequences of accepting changes.
+- **Maintainers** — Make decisions for the team and oversee the project direction.
+
+When a bug occurs in code you merged, you should fix it. If you cannot solve it, you should roll back the project.
+
+## Ways to Contribute
+
+IvorySQL welcomes all types of contributions:
+
+### Code Contribution
+
+Upload bug fixes, new features, or improvements to your fork, then submit a pull request to the main repository at [github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL).
+
+### Documentation Contribution
+
+The IvorySQL community provides both Chinese and English documentation. English documents are stored in the main document repository, and Chinese documents are in the i18n repository. You can contribute to either or both.
+
+When adding or updating a plugin compatibility document, you must also update the plugin summary table in the [IvorySQL Ecosystem Plugin Compatibility List](/docs/v5/ecosystem). Keep the plugin name, version, function description, use cases, and link to the detail page in sync.
+
+### Testing and Bug Reports
+
+Test IvorySQL in your environment and report bugs:
+
+- **GitHub**: [github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL)
+- **Gitee**: [gitee.com/IvorySQL](https://gitee.com/IvorySQL/)
+
+### Website Contribution
+
+The official website source is at [github.com/IvorySQL/Ivory-www](https://github.com/IvorySQL/Ivory-www).
+
+### Mailing List Participation
+
+Answer questions and engage in discussions on the [mailing list](https://lists.ivorysql.org/).
+
+### Blog Posts
+
+Submit articles to the blog in the IvorySQL-WWW repository, or send them to [renjiao@highgo.com](mailto:renjiao@highgo.com).
+
+## Licensing
+
+If the contribution you submit is original work, IvorySQL will release it under the **Apache License, Version 2.0**.
+
+If the contribution is NOT original work, you must indicate the name of the license and ensure it is compatible with Apache 2.0 (ASF Category A licenses). You may also need to make proper attributions.
+
+Never remove licensing headers from work that is not your original creation. If you are unsure about licensing implications, reach out on the developer mailing list.
+
+## Coding Guidelines
+
+### General Principles
+
+Your chances of getting feedback and seeing your code merged depend greatly on how granular your changes are. If you have a bigger change in mind, we recommend engaging on the [developer's mailing list](https://lists.ivorysql.org/) first to share your proposal.
+
+Even when your proposal is validated by the community, do the actual work as a series of small, self-contained commits. This makes the reviewer's job much easier and increases the timeliness of feedback.
+
+### Language Conventions
+
+For C and C++ parts of IvorySQL, we follow [PostgreSQL Coding Conventions](https://www.postgresql.org/docs/current/source.html). Additionally:
+
+- For C and Perl code, run `pgindent` if necessary.
+- Use `git diff --color` when reviewing your changes to avoid spurious whitespace issues.
+- All new functionality should be covered by regression tests contributed alongside it.
+
+### Running Tests
+
+At the very minimum, always run:
+
+```bash
+make installcheck world
+```
+
+to make sure you are not breaking anything.
+
+### Changes Applicable to Upstream PostgreSQL
+
+If the change touches functionality common between PostgreSQL and IvorySQL, you may be asked to forward-port it to PostgreSQL. This reduces the delta between the two projects and allows changes relevant to PostgreSQL to benefit from broader upstream review.
+
+## How to Submit an Issue
+
+<Steps>
+  <Step>
+    **Navigate to the repository.** Go to [github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL) and click **New issue**.
+  </Step>
+  <Step>
+    **Select the issue type.** Choose from:
+    - **Bug Report** — Include IvorySQL version, OS version, configuration options, current behavior, expected behavior, and steps to reproduce.
+    - **Enhancement** — Describe the functions you expect to be strengthened.
+    - **Feature Request** — Describe the feature you expect to be implemented.
+  </Step>
+  <Step>
+    **Submit.** Click the submit button.
+  </Step>
+</Steps>
+
+## How to Contribute Code
+
+<Steps>
+  <Step>
+    **Fork the repository.** Open [github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL) and click the **Fork** button in the upper right corner.
+  </Step>
+  <Step>
+    **Create or claim an Issue.** Before you start coding, make sure there is a corresponding GitHub Issue for the change. Do not submit a PR without an associated Issue.
+  </Step>
+  <Step>
+    **Clone your fork.**
+    ```bash
+    cd ~/Documents/GitHub
+    git clone git@github.com:$USER/IvorySQL.git
+    ```
+  </Step>
+  <Step>
+    **Create a new branch.**
+    ```bash
+    cd IvorySQL
+    git checkout -b new-branch-name
+    ```
+  </Step>
+  <Step>
+    **Modify code or documentation.** Make your changes in the new branch.
+  </Step>
+  <Step>
+    **Commit your changes.**
+    ```bash
+    git add <file>
+    git commit -m "commit-message"
+    ```
+  </Step>
+  <Step>
+    **Push to your fork.**
+    ```bash
+    git push -u origin new-branch-name
+    ```
+  </Step>
+  <Step>
+    **Create a Pull Request.** Open your fork on GitHub, click **Compare & pull request**, and create a PR. Reference the corresponding Issue in the PR description (e.g., `Fixes #123`).
+  </Step>
+</Steps>
+
+## Pull Request Guidelines
+
+- Each PR should contain **only one feature or one bug fix**. Do not submit multiple unrelated features in a single PR.
+- Every PR must have a **corresponding Issue**.
+- Reference the related Issue explicitly in the PR description, for example `Fixes #123` or `Refs #123`.
+
+## Peer Review
+
+A submitted pull request with passing validation checks is available for peer review. Every member of the IvorySQL community is encouraged to review pull requests and provide feedback.
+
+A peer review converges when it receives at least one **+1** and no **-1** votes from participants. At that point, a core team member will pull your changes into the project.
+
+If you are not getting expected feedback for a few days, add a comment asking for updates on the pull request itself or send an email to the mailing list.
+
+## Direct Commits
+
+On occasion, core team members commit directly to the repository without going through the pull request workflow. This is reserved for small changes only. The rule of thumb: if the change touches any functionality that may result in a test failure, it must go through a pull request. Non-functional changes (such as fixing a typo in a comment) may be committed directly.
+
+## Contributing Documentation
+
+### Where to Contribute
+
+You can help improve the IvorySQL documentation by:
+
+1. Preparing complete documentation for new features.
+2. Fixing incorrect spelling and formatting (punctuation, spacing, indentation, code blocks).
+3. Correcting or updating outdated instructions.
+4. Adding missing content (sentences, paragraphs, or new pages).
+5. Translating between English and Chinese.
+6. Submitting, replying to, and resolving documentation issues.
+7. Reviewing pull requests created by others.
+
+### Submitting a Blog Post
+
+<Steps>
+  <Step>
+    **Clone the Ivory-www repository.**
+    ```bash
+    git clone https://github.com/IvorySQL/Ivory-www.git
+    ```
+  </Step>
+  <Step>
+    **Create a branch.**
+    ```bash
+    git checkout -b <branch-name>
+    ```
+  </Step>
+  <Step>
+    **Create a directory for your article.**
+    ```bash
+    # English blog
+    cd Ivory-www/blog
+    mkdir <YEAR-MONTH-DAY-title>
+    cd <YEAR-MONTH-DAY-title>
+    touch index.md
+
+    # Chinese blog
+    cd Ivory-www/i18n/zh-CN/docusaurus-plugin-content-blog
+    mkdir <YEAR-MONTH-DAY-title>
+    cd <YEAR-MONTH-DAY-title>
+    touch index.md
+    ```
+  </Step>
+  <Step>
+    **Write your blog post in `index.md`.** Place any required images in the same directory.
+  </Step>
+  <Step>
+    **Submit.**
+    ```bash
+    git add <file-path>
+    git commit -m "<message>"
+    git push origin <branch-name>:<branch-name>
+    ```
+  </Step>
+</Steps>
+
+Blog folder naming format: **year-month-day-foldername** (e.g., `2022-1-28-ivorysql-arrived`). The file must be named `index.md`. Images must be `.png` format with unique filenames.
+
+Each blog post should include a header:
+
+```yaml
+---
+slug: IvorySQL
+title: Welcome to IvorySQL community
+authors: [official]
+authorTwitter: IvorySql
+tags: [IvorySQL, Welcome, Database, Join Us]
+---
+```
+
+## Contact
+
+If you do not have much time for a full contribution workflow, you can send an email to [ivorysql-docs@ivorysql.org](mailto:ivorysql-docs@ivorysql.org). We have dedicated staff to handle every letter.
