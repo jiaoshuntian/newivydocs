@@ -1,87 +1,89 @@
 ---
 title: Core Concepts
-description: Understand IvorySQL's dual-mode architecture and compatibility features.
+description: Understand IvorySQL's dual-mode architecture and decide which mode fits your workload.
 ---
 
 # Core Concepts
 
-IvorySQL is built on PostgreSQL and adds full Oracle compatibility through a dual-mode architecture. This page explains the key concepts you need to understand.
+IvorySQL adds Oracle compatibility to PostgreSQL without forking the engine. This page explains the key design decisions and helps you decide how to configure it for your use case.
 
-## What is IvorySQL?
+## Which mode should I use?
 
-IvorySQL is an advanced, full-featured, Oracle-compatible PostgreSQL distribution. It adds a GUC parameter called `ivorysql.compatible_mode` that controls the database's compatibility mode with two values:
+<Callout type="tip">
+**Use Oracle mode if** you are migrating from Oracle, running PL/SQL code, or need Oracle built-in functions like `SYSDATE`, `NVL`, `TO_CHAR`, or `ROWNUM`.
 
-- **`oracle`** — Oracle compatibility mode (default when initializing with `-m oracle`)
-- **`pg`** — Pure PostgreSQL mode
+**Use PG mode if** you are building a new application from scratch, need 100% PostgreSQL syntax compatibility, or are integrating with tools that expect standard PostgreSQL behavior.
 
-## Dual-Mode Architecture
+You can switch modes at runtime with `SET ivorysql.compatible_mode TO pg` — as long as the cluster was initialized in Oracle mode.
+</Callout>
 
-When you initialize a data directory, you specify the compatibility mode:
+## Dual-mode architecture
+
+When you create a cluster, you choose its default compatibility mode using the `-m` flag on `initdb`:
 
 ```bash
-# Oracle compatibility mode (default if -m is omitted)
+# Oracle-compatible mode (this is the default if -m is omitted)
 initdb -D /usr/ivory-5/data -m oracle
 
 # PostgreSQL mode
 initdb -D /usr/ivory-5/data -m pg
 ```
 
-In Oracle mode:
-- The `ivorysql.compatible_mode` parameter defaults to `oracle`
-- Some PostgreSQL-specific syntax may not be available
-- Oracle-compatible features are enabled (PL/iSQL, built-in functions, data types)
+The mode you choose at initialization sets the baseline. In Oracle mode, every connection starts with Oracle compatibility active. In PG mode, Oracle features are never available — the mode cannot be switched later.
 
-In PG mode:
-- The `ivorysql.compatible_mode` parameter is disabled
-- 100% PostgreSQL syntax and function support
-- No Oracle compatibility features active
+## Dual-port design
 
-<Callout type="info">
-You can switch modes at runtime with `SET ivorysql.compatible_mode TO pg`, but this only works if the data directory was initialized in Oracle mode.
-</Callout>
+IvorySQL listens on two ports. The port you connect on determines the default compatibility mode for that session:
 
-## PL/iSQL — Oracle's PL/SQL for PostgreSQL
+| Port | Default mode | Use for |
+|------|-------------|---------|
+| **1521** | Oracle | Oracle applications, migrations, PL/SQL |
+| **5432** | PostgreSQL | PG-native tools, drivers, ORMs |
 
-One of IvorySQL's standout features is **PL/iSQL**, a procedural language that supports Oracle's PL/SQL syntax. This means you can migrate Oracle stored procedures to IvorySQL with minimal changes.
+If you connect on 5432 and need Oracle mode for a specific session, run:
 
-## The ivorysql_ora Plugin
+```sql
+SET ivorysql.compatible_mode TO oracle;
+```
 
-IvorySQL implements Oracle-compatible features through the `ivorysql_ora` plugin, which is bound to the kernel and provides:
+## What Oracle features work out of the box?
 
-- Built-in Oracle functions
-- Oracle data types
-- System views
-- Merge operations
-- Additional GUC parameters
+When Oracle mode is active, these capabilities are available without any configuration:
 
-New compatibility features are continuously added via this plugin architecture.
+**Procedural language**
+- PL/iSQL (Oracle PL/SQL syntax for functions, procedures, packages)
+- Anonymous blocks (`BEGIN … END; /`)
+- Nested subfunctions, OUT parameters, `%TYPE` / `%ROWTYPE`
 
-## Key Compatibility Features
+**Data types and functions**
+- `NUMBER`, `VARCHAR2`, `DATE`, `CLOB`, `BLOB`
+- `SYSDATE`, `TO_CHAR`, `TO_DATE`, `NVL`, `DECODE`, `TRUNC`
+- `SYS_GUID()` for UUID generation
 
-IvorySQL supports these Oracle-compatible capabilities:
+**SQL syntax**
+- `SELECT … FROM dual`
+- `ROWNUM` pseudo-column
+- Oracle `LIKE` wildcard behavior
+- `ROWID` pseudo-column
+- Empty string treated as `NULL`
+- `CONNECT BY` hierarchical queries
 
-- Case conversion (automatic case handling)
-- `LIKE` operator (Oracle-style pattern matching)
-- Anonymous blocks
-- Functions and stored procedures (PL/iSQL)
-- Oracle built-in data types and functions
-- XML functions
-- Sequences
-- Oracle packages (DBMS_*, UTL_*)
+**Schema objects**
+- Oracle-style sequences (`seq.NEXTVAL`, `seq.CURRVAL`)
+- Packages (`CREATE PACKAGE … END;`)
 - Invisible columns
-- RowID columns
-- OUT parameters
-- `%TYPE` and `%ROWTYPE`
-- NLS parameters
-- Force view
-- Nested subfunctions
-- `sys_guid()` function
-- Empty string to NULL conversion
-- `CALL INTO` syntax
+- Force views
 
-## Next Steps
+## The ivorysql_ora plugin
+
+Oracle compatibility is implemented in a plugin called `ivorysql_ora`, which is bundled with the database. It provides the Oracle built-in functions, system views, data types, and GUC parameters. New compatibility features are delivered via this plugin as IvorySQL evolves.
+
+You do not need to install or configure this plugin manually — it is active whenever Oracle mode is enabled.
+
+## Next steps
 
 <Cards>
-  <Card href="/docs/v5/getting-started/quick-start" title="Quick Start" description="Get IvorySQL running in under 5 minutes." />
-  <Card href="/docs/v5/oracle-compatibility" title="Oracle Compatibility" description="Deep dive into Oracle compatibility features." />
+  <Card href="/docs/v5/oracle-compatibility" title="Oracle Compatibility" description="Browse every Oracle-compatible feature — organized by category." />
+  <Card href="/docs/v5/oracle-compatibility/compatibility-mode" title="Compatibility Mode (GUC)" description="Fine-grained control over which Oracle behaviors are active." />
+  <Card href="/docs/v5/migration" title="Migrate from Oracle" description="Use Ora2Pg to automate schema and data migration from an Oracle database." />
 </Cards>

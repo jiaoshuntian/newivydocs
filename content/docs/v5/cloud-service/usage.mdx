@@ -1,0 +1,152 @@
+---
+title: User Guide
+description: Provision databases, manage clusters, run backups, and monitor IvorySQL instances from the IvorySQL Cloud web interface.
+---
+
+# IvorySQL Cloud User Guide
+
+After [installing IvorySQL Cloud](/docs/v5/cloud-service/installation), open `http://<your-server-ip>:9104/` in a browser to reach the login page.
+
+<Callout type="info">
+IvorySQL Cloud has two built-in roles: **admin** manages Kubernetes clusters and platform configuration; **demo** provisions and manages databases.
+</Callout>
+
+---
+
+## Sign in and sign out
+
+On the login page, enter your username and password.
+
+To sign out, click the avatar in the upper-right corner and select **Log Out**.
+
+---
+
+## Administrator features
+
+Log in as `admin` to access cluster management.
+
+### Add a Kubernetes cluster
+
+1. Click **K8S Cluster Management** in the left navigation bar.
+2. Click **Add Kubernetes Cluster** in the upper-left corner.
+3. Fill in the cluster name, API server URL, and kubeconfig credentials.
+4. Click **Submit**.
+
+### Manage existing clusters
+
+The cluster list shows status, node count, and actions for each registered cluster. Use **Edit** to update credentials or **Delete** to remove a cluster from the platform.
+
+---
+
+## Demo user features
+
+Log in as `demo` to provision and manage databases.
+
+### Provision a database
+
+1. Click **Database Subscription** in the left navigation.
+2. Fill in the database parameters:
+   - Cluster (which Kubernetes cluster to deploy to)
+   - Instance name
+   - CPU and memory limits
+   - Storage size
+3. Click **Next: Confirm**, review the settings, then click **Confirm**.
+4. The platform redirects to **Database Management** where the new instance appears as a running task.
+
+### Database management
+
+**Database Management** lists all IvorySQL instances managed by the platform. From this page you can:
+
+- View instance status and connection details
+- Access **More** actions: Restart, Change Password, Storage Expansion, Specification Change, Backup, Restore, Monitoring, Login
+
+### Restart a database
+
+1. In **Database Management**, find the instance, click **More → Restart**.
+2. Review the confirmation dialog and click **Confirm**.
+
+### Change the database password
+
+1. In **Database Management**, click the instance's **Instance ID** to open the details page.
+2. Click the password icon.
+3. Enter a new password and click **Confirm**.
+
+### Delete an instance
+
+1. In **Database Management**, click **More → Delete Instance**.
+2. Confirm the deletion dialog.
+
+<Callout type="warn">
+Deleting an instance removes its Kubernetes resources. Make sure you have a backup before deleting.
+</Callout>
+
+---
+
+## Backup and restore
+
+### Create a backup
+
+1. Go to **Database Backup**, select the database, then click **Backup** in the **Actions** column.
+   Or: **Database Management → More → Backup**.
+2. Enter a backup name and click **Confirm**.
+
+### Restore from a backup
+
+1. Go to **Database Restore**, select the database, then click **View** in the **Actions** column.
+   Or: **Database Management → More → Restore**.
+2. Select the backup file from the list and click **Restore**.
+3. Enter the target database information (use the password that was active at backup time).
+4. Follow the database subscription workflow to complete provisioning.
+
+---
+
+## Storage and specification changes
+
+### Expand storage
+
+<Callout type="info">
+Storage expansion requires the TopoLVM plug-in (or equivalent dynamic storage provisioner) installed in your Kubernetes cluster.
+</Callout>
+
+1. Click **Storage Expansion** or go to **Database Management → More → Storage Expansion**.
+2. Select the database and click **Edit**.
+3. Enter the new storage size and click **Confirm**.
+
+### Change CPU/memory specification
+
+1. Click **Specification Change** or go to **Database Management → More → Specification Change**.
+2. Select the database and click **Edit**.
+3. Enter the new CPU and memory values, then click **Confirm**.
+
+---
+
+## Monitoring
+
+IvorySQL Cloud integrates Grafana and Prometheus to provide per-database metrics dashboards.
+
+1. Click **Monitoring Tools** in the left navigation.
+2. Select the Kubernetes cluster where the database runs.
+   Or: **Database Management → More → Monitoring**.
+3. Once the monitoring stack is ready, open the monitoring page and log in with `admin / admin`.
+4. Click the search icon to browse available dashboards and metrics.
+
+Available metrics include connection counts, query throughput, replication lag, disk I/O, and memory usage.
+
+---
+
+## Visual login tool (pgAdmin)
+
+IvorySQL Cloud includes a browser-based database query tool powered by pgAdmin.
+
+1. In **Database Management**, click **More → Login**.
+2. On the new page, enter the database account (e.g., `sysdba@ivyo.com`) and password.
+3. Click **Login** to open the query interface.
+
+---
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/v5/monitor-manage/monitoring" title="Monitoring" description="Learn about IvorySQL's built-in monitoring capabilities." />
+  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Understand the operator that powers IvorySQL Cloud." />
+</Cards>

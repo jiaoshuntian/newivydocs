@@ -1,0 +1,47 @@
+---
+title: Cloud Service
+description: IvorySQL Cloud — a web-based control plane for managing IvorySQL clusters on Kubernetes without writing YAML.
+---
+
+# IvorySQL Cloud Service
+
+IvorySQL Cloud is a web-based management platform that sits on top of the [IvorySQL Operator](/docs/v5/deploy/operator). It gives you a graphical interface for provisioning, managing, monitoring, and backing up IvorySQL databases — without writing Kubernetes manifests.
+
+<Callout type="tip">
+IvorySQL Cloud is self-hosted. You install it on your own Kubernetes cluster. If you want fully managed IvorySQL without operating any infrastructure, this is the closest option available.
+</Callout>
+
+## What it provides
+
+- **Database subscription** — provision a new IvorySQL instance with a form, not a YAML file
+- **Cluster management** — add, edit, and delete Kubernetes clusters from the UI
+- **Monitoring** — integrated Grafana/Prometheus dashboards per database
+- **Backup & restore** — trigger backups and restore from a point in time
+- **Storage expansion** — grow database volumes without downtime
+- **Visual login tool** — browser-based psql via pgAdmin integration
+
+## Architecture
+
+IvorySQL Cloud consists of three components you deploy:
+
+| Component | Technology | Role |
+|-----------|-----------|------|
+| Frontend | React (built static files) | Web UI served by NGINX |
+| Backend | Java (Spring Boot) | REST API connecting UI to K8s |
+| Operator | IvorySQL Operator (IVYO) | Reconciles `IvoryCluster` resources |
+
+The backend stores cluster metadata in a PostgreSQL-compatible database (IvorySQL, HighGo DB, or plain PostgreSQL).
+
+## Prerequisites
+
+Before installing IvorySQL Cloud, you need:
+
+- A Kubernetes cluster (version ≥ 1.23) with a default storage class
+- `ivory-operator` installed on the cluster
+- A PostgreSQL-compatible database for the backend
+- NGINX on the application server
+
+<Cards>
+  <Card href="/docs/v5/cloud-service/installation" title="Installation Guide" description="Deploy the frontend, backend, NGINX, and Operator on your Kubernetes cluster." />
+  <Card href="/docs/v5/cloud-service/usage" title="User Guide" description="Provision databases, manage clusters, run backups, and monitor from the web UI." />
+</Cards>

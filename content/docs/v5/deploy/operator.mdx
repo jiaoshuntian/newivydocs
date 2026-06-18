@@ -1,0 +1,198 @@
+---
+title: IvorySQL Operator
+description: Manage IvorySQL clusters on Kubernetes declaratively using the IvorySQL Operator (IVYO) and custom resources.
+---
+
+# IvorySQL Operator
+
+The IvorySQL Operator (IVYO) lets you manage IvorySQL clusters on Kubernetes using a `IvoryCluster` custom resource. IVYO handles provisioning, failover, backup scheduling, and TLS — you declare the desired state, IVYO reconciles it.
+
+<Callout type="tip">
+IVYO is the recommended way to run IvorySQL on Kubernetes for production workloads. For simpler setups, see [Kubernetes StatefulSet](/docs/v5/deploy/kubernetes) or [IvorySQL Cloud](/docs/v5/cloud-service).
+</Callout>
+
+## Install the Operator
+
+<Steps>
+
+### Clone the operator repository
+
+```bash
+YOUR_GITHUB_UN="<your GitHub username>"
+git clone --depth 1 "git@github.com:${YOUR_GITHUB_UN}/ivory-operator.git"
+cd ivory-operator
+```
+
+Or use the upstream repository directly:
+
+```bash
+git clone https://github.com/IvorySQL/ivory-operator.git
+cd ivory-operator
+```
+
+### Install the CRDs and Operator
+
+```bash
+kubectl apply -k examples/kustomize/install/namespace
+kubectl apply --server-side -k examples/kustomize/install/default
+```
+
+Verify the operator pod is running:
+
+```bash
+kubectl get pods -n ivory-operator
+```
+
+</Steps>
+
+## Create a cluster
+
+<Steps>
+
+### Apply the example cluster manifest
+
+```bash
+kubectl apply -k examples/kustomize/ivory
+```
+
+This creates a cluster named `hippo` in the `ivory-operator` namespace.
+
+### Track cluster status
+
+```bash
+kubectl -n ivory-operator describe ivoryclusters.ivory-operator.ivorysql.org hippo
+```
+
+Watch the pods come up:
+
+```bash
+kubectl -n ivory-operator get pods \
+  --selector=ivory-operator.ivorysql.org/cluster=hippo,ivory-operator.ivorysql.org/instance
+```
+
+### Understand what was created
+
+The example `ivory.yaml` defines the cluster:
+
+```yaml
+apiVersion: ivory-operator.ivorysql.org/v1beta1
+kind: IvoryCluster
+metadata:
+  name: hippo
+spec:
+  image: ivorysql/ivorysql:latest
+  postgresVersion: 18
+  instances:
+    - name: instance1
+      dataVolumeClaimSpec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+  backups:
+    pgbackrest:
+      image: ivorysql/pgbackrest:latest
+      repos:
+        - name: repo1
+          volume:
+            volumeClaimSpec:
+              accessModes:
+                - "ReadWriteOnce"
+              resources:
+                requests:
+                  storage: 1Gi
+```
+
+IVYO reads `metadata.name` for the cluster name, `spec.instances` to decide how many replicas to create, and `spec.backups` to configure pgBackRest for WAL archiving and backups.
+
+</Steps>
+
+## Connect to the cluster
+
+IVYO creates Kubernetes Services and injects connection details into a Secret automatically.
+
+### Find the connection secret
+
+```bash
+kubectl -n ivory-operator get secrets \
+  --selector=ivory-operator.ivorysql.org/cluster=hippo
+```
+
+The primary connection secret is named `hippo-pguser-hippo` and contains:
+
+| Key | Value |
+|-----|-------|
+| `host` | The primary Service DNS name |
+| `port` | Database port (5432) |
+| `user` | Database username |
+| `password` | Database password |
+| `dbname` | Default database name |
+| `uri` | Full PostgreSQL connection URI |
+| `jdbc-uri` | JDBC connection URI |
+
+### Inject the secret into your application
+
+```yaml
+env:
+  - name: DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: hippo-pguser-hippo
+        key: host
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: hippo-pguser-hippo
+        key: password
+```
+
+### List the Services
+
+```bash
+kubectl -n ivory-operator get svc \
+  --selector=ivory-operator.ivorysql.org/cluster=hippo
+# NAME              TYPE        CLUSTER-IP      PORT(S)
+# hippo-ha          ClusterIP   10.103.73.92    5432/TCP
+# hippo-primary     ClusterIP   None            5432/TCP
+# hippo-replicas    ClusterIP   10.98.110.215   5432/TCP
+```
+
+Use `hippo-primary` for read/write connections and `hippo-replicas` for read-only connections.
+
+## Expose the cluster externally
+
+To access the cluster from outside Kubernetes, change the Service type to `NodePort`:
+
+```yaml
+spec:
+  service:
+    type: NodePort
+    nodePort: 32000
+```
+
+Apply the change and confirm:
+
+```bash
+kubectl -n ivory-operator get svc --selector=ivory-operator.ivorysql.org/cluster=hippo
+# NAME      TYPE       PORT(S)
+# hippo-ha  NodePort   5432:32000/TCP
+```
+
+## Troubleshooting
+
+**Pods stuck in `Pending`** — Usually a PVC binding issue. Check that your storage class exists and has available PVs:
+
+```bash
+kubectl get pvc -n ivory-operator
+kubectl describe pvc <name> -n ivory-operator
+```
+
+**On OpenShift** — Set `spec.openshift: true` in the `IvoryCluster` manifest.
+
+## Next steps
+
+<Cards>
+  <Card href="https://github.com/IvorySQL/ivory-operator" title="Operator GitHub" description="Full tutorial: HA, backups, scaling, custom TLS, and more." />
+  <Card href="/docs/v5/cloud-service" title="IvorySQL Cloud" description="Managed IvorySQL with a graphical control plane built on the Operator." />
+</Cards>

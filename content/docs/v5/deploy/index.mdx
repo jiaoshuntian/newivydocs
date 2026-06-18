@@ -5,14 +5,32 @@ description: Install and configure IvorySQL on any platform.
 
 # Deploy
 
-This section covers every way to install and deploy IvorySQL — from a quick YUM install on CentOS to a full source build, and from a single-node Docker container to a multi-node streaming replication cluster.
+Install IvorySQL on Linux, build from source, or deploy with Docker — this section covers every method.
 
-## Installation Methods
+<Callout type="tip">
+**Not sure which method to use?**
+- **CentOS / RHEL** → [YUM / DNF](/docs/v5/deploy/install-yum) — easiest, managed updates
+- **Ubuntu / Debian** → [APT / DPKG](/docs/v5/deploy/install-apt)
+- **Containers** → start with the [Quick Start Docker path](/docs/v5/getting-started/quick-start)
+- **Air-gapped or custom builds** → [RPM / DEB packages](/docs/v5/deploy/install-rpm-deb) or [Build from Source](/docs/v5/deploy/install-source)
+- **Production HA** → [Cluster Setup](/docs/v5/deploy/cluster) after initial install
+</Callout>
+
+## Linux packages
 
 <Cards>
-  <Card href="/docs/v5/deploy/install-yum" title="YUM / DNF" description="Install on CentOS Stream 9, RHEL, and compatible systems." />
+  <Card href="/docs/v5/deploy/install-yum" title="YUM / DNF" description="Install on CentOS Stream 9, RHEL, and compatible systems. Recommended for most Linux deployments." />
   <Card href="/docs/v5/deploy/install-apt" title="APT / DPKG" description="Install on Ubuntu and Debian-based systems." />
-  <Card href="/docs/v5/deploy/install-source" title="Build from Source" description="Compile IvorySQL from source for full customization." />
-  <Card href="/docs/v5/deploy/install-rpm-deb" title="RPM / DEB Packages" description="Install pre-built packages directly from releases." />
-  <Card href="/docs/v5/deploy/cluster" title="Cluster Setup" description="Set up streaming replication between primary and standby nodes." />
+  <Card href="/docs/v5/deploy/install-source" title="Build from Source" description="Compile IvorySQL from source — use this for custom patches, unsupported platforms, or development." />
+  <Card href="/docs/v5/deploy/install-rpm-deb" title="RPM / DEB Packages" description="Install pre-built packages manually — useful for air-gapped environments." />
+  <Card href="/docs/v5/deploy/cluster" title="Cluster Setup" description="Set up streaming replication between a primary and one or more standby nodes." />
+</Cards>
+
+## Containers & Kubernetes
+
+<Cards>
+  <Card href="/docs/v5/deploy/docker-podman" title="Docker & Podman" description="Run a single IvorySQL container with Docker or Podman in one command." />
+  <Card href="/docs/v5/deploy/docker-swarm" title="Docker Swarm & Compose" description="Deploy a multi-node HA cluster using Docker Swarm or Docker Compose with etcd and Patroni." />
+  <Card href="/docs/v5/deploy/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a StatefulSet or a Patroni-managed HA cluster using Helm." />
+  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters on Kubernetes declaratively with a custom resource (CRD)." />
 </Cards>

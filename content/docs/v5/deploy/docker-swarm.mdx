@@ -1,0 +1,195 @@
+---
+title: Docker Swarm & Compose
+description: Deploy an IvorySQL high-availability cluster using Docker Swarm or Docker Compose with etcd and Patroni.
+---
+
+# Docker Swarm & Compose
+
+Both Docker Swarm and Docker Compose can deploy an IvorySQL HA cluster backed by Patroni and etcd. Swarm manages the cluster across multiple hosts; Compose runs each node independently with containers you connect manually.
+
+## Prerequisites
+
+- Three servers with network connectivity
+- Docker installed on each server
+- Git to clone the deployment templates
+
+All examples use these test nodes:
+
+| Node | IP |
+|------|----|
+| manager-node1 | 192.168.21.205 |
+| manager-node2 | 192.168.21.164 |
+| manager-node3 | 192.168.21.51 |
+
+---
+
+## Docker Swarm
+
+<Steps>
+
+### Initialize the Swarm cluster
+
+Verify your three nodes have joined the swarm:
+
+```bash
+docker node ls
+# ID                            HOSTNAME        STATUS    AVAILABILITY   MANAGER STATUS
+# y9d9wd9t2ncy4t9bvw6bg9sjs *   manager-node1   Ready     Active         Reachable
+# iv17o6m9t9e06vd9iu1o6damd     manager-node2   Ready     Active         Leader
+# vjnax76qj812mlvut6cv4qotl     manager-node3   Ready     Active         Reachable
+```
+
+### Clone the deployment templates
+
+```bash
+git clone https://github.com/IvorySQL/docker_library.git
+cd docker_library/docker-cluster/docker-swarm
+```
+
+### (Optional) Prepare external data directories
+
+If you want data to persist outside the containers:
+
+```bash
+mkdir -p /home/ivorysql/{data,patroni}
+chown -R 1000:1000 /home/ivorysql/{data,patroni}
+chmod 700 /home/ivorysql/{data,patroni}
+```
+
+Update the `volumes` section in `docker-swarm-ivypatroni.yml` to match.
+
+### Deploy the etcd cluster
+
+```bash
+docker stack deploy -c docker-swarm-etcd.yml ivoryhac-etcd
+```
+
+Verify all three etcd services are running:
+
+```bash
+docker service ls
+# NAME                  MODE         REPLICAS   IMAGE
+# ivoryhac-etcd_etcd1   replicated   1/1        quay.io/coreos/etcd:v3.5.8
+# ivoryhac-etcd_etcd2   replicated   1/1        quay.io/coreos/etcd:v3.5.8
+# ivoryhac-etcd_etcd3   replicated   1/1        quay.io/coreos/etcd:v3.5.8
+```
+
+### Deploy the IvorySQL HA cluster
+
+```bash
+docker stack deploy -c docker-swarm-ivypatroni.yml ivoryhac-patroni
+```
+
+```bash
+docker service ls
+# NAME                       MODE         REPLICAS   IMAGE                                             PORTS
+# ivorysql-hac_ivypatroni1   replicated   1/1        ivorysql/docker-swarm-ha-cluster:...             *:1521->1521/tcp, *:5866->5866/tcp
+# ivorysql-hac_ivypatroni2   replicated   1/1        ivorysql/docker-swarm-ha-cluster:...             *:1522->1521/tcp, *:5867->5866/tcp
+```
+
+### Connect
+
+Oracle-compatible port (primary):
+
+```bash
+psql -h 127.0.0.1 -p 1521 -U ivorysql -d ivorysql
+```
+
+PostgreSQL port (primary):
+
+```bash
+psql -h 127.0.0.1 -p 5432 -U ivorysql -d ivorysql
+```
+
+### Uninstall
+
+```bash
+docker stack rm ivoryhac-patroni
+docker stack rm ivoryhac-etcd
+```
+
+</Steps>
+
+---
+
+## Docker Compose
+
+Docker Compose deploys each node independently. You run a Compose file on each of the three servers.
+
+<Steps>
+
+### Clone the templates
+
+Run on each server:
+
+```bash
+git clone https://github.com/IvorySQL/docker_library.git
+cd docker_library/docker-cluster/docker-compose
+```
+
+### Assign nodes
+
+| Server IP | Hosts |
+|-----------|-------|
+| 192.168.21.205 | etcd1 + ivypatroni1 |
+| 192.168.21.164 | etcd2 + ivypatroni2 |
+| 192.168.21.51  | etcd3 + ivypatroni3 |
+
+### Deploy etcd (run on each node)
+
+On node1:
+
+```bash
+docker-compose -f ./docker-compose-etcd1.yml up -d
+# ✔ Container etcd  Started
+```
+
+Repeat with `etcd2.yml` on node2 and `etcd3.yml` on node3.
+
+### Deploy IvorySQL (run on each node)
+
+On node1:
+
+```bash
+docker-compose -f ./docker-compose-ivypatroni_1.yml up -d
+# ✔ Container ivyhac1  Started
+```
+
+Repeat with `_2.yml` on node2 and `_3.yml` on node3.
+
+### Verify the cluster
+
+```bash
+docker ps
+# CONTAINER ID   IMAGE                                                NAMES
+# 736c0d188bdd   ivorysql/docker-compose-ha-cluster:...               ivyhac1
+# 9d8e04e4f819   quay.io/coreos/etcd:v3.5.8                           etcd
+```
+
+At this point a one-primary, two-standby cluster is running.
+
+### Connect
+
+```bash
+# Oracle-compatible port
+psql -h 127.0.0.1 -p 1521 -U ivorysql -d ivorysql
+
+# PostgreSQL port
+psql -h 127.0.0.1 -p 5432 -U ivorysql -d ivorysql
+```
+
+### Uninstall (run on each node)
+
+```bash
+docker-compose -f ./docker-compose-ivypatroni_1.yml down
+docker-compose -f ./docker-compose-etcd1.yml down
+```
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/v5/deploy/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a StatefulSet or a Patroni-managed HA cluster with Helm." />
+  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters declaratively with a Kubernetes custom resource." />
+</Cards>

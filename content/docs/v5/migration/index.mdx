@@ -9,18 +9,36 @@ import { Steps } from 'fumadocs-ui/components/steps';
 
 This guide walks you through migrating an Oracle database to IvorySQL using [Ora2Pg](https://github.com/darold/ora2pg), a free open-source tool that extracts Oracle schema and data, then generates SQL scripts compatible with IvorySQL (PostgreSQL-based).
 
-## Migration Overview
+## Before you start: estimate your migration complexity
 
-Database migration transfers data from one database system to another. The source and target databases may be PostgreSQL, IvorySQL, MySQL, Oracle, SQL Server, or any combination thereof. It is a complex process that requires a thorough understanding of how both databases work.
+<Callout type="tip">
+**Run the cost estimator first.** Before installing anything, connect Ora2Pg to your Oracle database and generate a migration report. This tells you how much manual work to expect — and where — before you commit to the migration.
 
-If your application is already deployed to production, you need a smooth migration strategy that maintains uninterrupted business operation with zero data loss.
+```bash
+ora2pg -t SHOW_REPORT --estimate_cost -c ora2pg.conf
+```
 
-After migration, your system should meet these requirements:
+The report assigns a migration level:
 
-- **No data loss** -- the migrated system must fully host all data from the original system.
-- **Full functional compatibility** -- all data types, syntax, and functions must work in the new system, or have viable alternatives.
-- **Upstream/downstream compatibility** -- the migrated database must integrate seamlessly with the rest of your business system.
-- **Performance parity** -- the migrated database must perform at least as well as the original.
+| Level | Meaning |
+|-------|---------|
+| **A** | Likely fully automatic — no stored logic or trivial |
+| **B** | Up to 5 person-days of manual code rewriting |
+| **C** | More than 5 person-days — complex PL/SQL, custom types |
+
+Technical difficulty is rated 1 (trivial) to 5 (significant stored procedure rewriting required).
+
+Run this before starting the installation steps below.
+</Callout>
+
+## Migration goals
+
+A successful migration delivers:
+
+- **No data loss** — all rows, types, and constraints transfer completely.
+- **Full functional compatibility** — every query, function, and procedure works correctly in IvorySQL.
+- **Upstream/downstream compatibility** — applications connecting to the new database behave identically.
+- **Performance parity** — the migrated database performs at least as well as Oracle.
 
 ## The Ora2Pg Tool
 

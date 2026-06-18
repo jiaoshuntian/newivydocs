@@ -1,0 +1,125 @@
+---
+title: Docker & Podman
+description: Run IvorySQL in a single container using Docker or Podman.
+---
+
+# Docker & Podman
+
+The quickest way to run IvorySQL without a package install. Both Docker and Podman are supported with the same image.
+
+<Callout type="tip">
+Need a high-availability setup with multiple nodes? See [Docker Swarm & Compose](/docs/v5/deploy/docker-swarm) or [Kubernetes](/docs/v5/deploy/kubernetes).
+</Callout>
+
+## Docker
+
+<Steps>
+
+### Pull the image
+
+```bash
+docker pull ivorysql/ivorysql:latest
+```
+
+### Start the container
+
+```bash
+docker run --name ivorysql \
+  -p 5434:5432 \
+  -e IVORYSQL_PASSWORD=your_password \
+  -d ivorysql/ivorysql:latest
+```
+
+Port mapping: `5434` on the host maps to PostgreSQL port `5432` inside the container. The Oracle-compatible port `1521` is also exposed inside the container.
+
+### Verify it's running
+
+```bash
+docker ps | grep ivorysql
+```
+
+Expected output:
+
+```
+CONTAINER ID   IMAGE                  COMMAND                  CREATED         STATUS         PORTS                              NAMES
+6faa2d0ed705   ivorysql/ivorysql:...  "docker-entrypoint.s…"   50 seconds ago  Up 49 seconds  5866/tcp, 0.0.0.0:5434->5432/tcp   ivorysql
+```
+
+### Connect
+
+```bash
+psql -d ivorysql -U ivorysql -h 127.0.0.1 -p 5434
+```
+
+</Steps>
+
+## Podman
+
+<Steps>
+
+### Pull the image
+
+```bash
+podman pull ivorysql/ivorysql:latest
+```
+
+### Start the container
+
+```bash
+podman run --name ivorysql \
+  -p 5434:5432 \
+  -e IVORYSQL_PASSWORD=your_password \
+  -d ivorysql/ivorysql:latest
+```
+
+### Verify it's running
+
+```bash
+podman ps | grep ivorysql
+```
+
+Expected output:
+
+```
+CONTAINER ID  IMAGE                        COMMAND   CREATED         STATUS         PORTS                                        NAMES
+368dee58d5ef  docker.io/ivorysql/ivorysql  postgres  20 seconds ago  Up 20 seconds  0.0.0.0:5434->5432/tcp, 1521/tcp, 5866/tcp   ivorysql
+```
+
+### Connect via shell
+
+```bash
+podman exec -it ivorysql /bin/bash
+```
+
+Then inside the container:
+
+```bash
+psql -d ivorysql
+```
+
+</Steps>
+
+## Ports
+
+| Port (host) | Port (container) | Protocol |
+|-------------|-----------------|----------|
+| 5434 | 5432 | PostgreSQL |
+| — | 1521 | Oracle-compatible (expose manually with `-p 1521:1521`) |
+
+To expose the Oracle-compatible port:
+
+```bash
+docker run --name ivorysql \
+  -p 5434:5432 \
+  -p 1521:1521 \
+  -e IVORYSQL_PASSWORD=your_password \
+  -d ivorysql/ivorysql:latest
+```
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/v5/deploy/docker-swarm" title="Docker Swarm & Compose" description="Deploy a multi-node HA cluster with etcd and Patroni." />
+  <Card href="/docs/v5/deploy/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a single pod or a Patroni-managed HA cluster." />
+  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters on Kubernetes with a custom operator." />
+</Cards>

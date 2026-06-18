@@ -1,0 +1,240 @@
+---
+title: Installation Guide
+description: Deploy IvorySQL Cloud — backend, frontend, NGINX, and the IvorySQL Operator — on a Kubernetes cluster.
+---
+
+# IvorySQL Cloud Installation
+
+This guide walks through deploying every component of the IvorySQL Cloud platform on a Kubernetes 1.23+ cluster.
+
+## Prerequisites
+
+Before you begin:
+
+- A Kubernetes cluster (≥ 1.23) with a default storage class
+- `ivory-operator` installed — see [IvorySQL Operator](/docs/v5/deploy/operator)
+- A running PostgreSQL-compatible database for the backend (IvorySQL, HighGo DB, or PostgreSQL)
+- Java 1.8 on the application server
+- Node.js and npm for building the frontend
+
+## Pre-installation checklist
+
+Complete these steps on every server in your cluster:
+
+### Disable the firewall
+
+```bash
+systemctl stop firewalld.service
+systemctl disable firewalld.service
+```
+
+### Required container images
+
+Pre-load these images on every Kubernetes node if your servers don't have direct Docker Hub access:
+
+```
+docker.io/ivorysql/ivory-operator:v5.0-latest
+docker.io/ivorysql/pgadmin:ubi8-9.9-5.0-1
+docker.io/ivorysql/pgbackrest:ubi8-2.56.0-5.0-1
+docker.io/ivorysql/postgres-exporter:ubi8-0.17.0-5.0-1
+docker.io/ivorysql/ivorysql:ubi8-5.0-5.0-1
+docker.io/prom/prometheus:v2.33.5
+docker.io/prom/alertmanager:v0.22.2
+docker.io/grafana/grafana:8.5.10
+```
+
+---
+
+## Backend deployment
+
+### Set up the backend database
+
+Install a PostgreSQL-compatible database to store cloud platform data (user accounts, cluster metadata, billing). Follow the [IvorySQL install guide](/docs/v5/deploy) or use an existing PostgreSQL instance.
+
+### Build the backend service
+
+```bash
+git clone https://github.com/IvorySQL/ivory-cloud.git
+cd ivory-cloud
+```
+
+Ensure all `.sh` files in the monitor directory use Unix line endings:
+
+```bash
+find ivory-cloud/cloudnative/src/main/resources/monitor -name "*.sh" -exec dos2unix {} \;
+```
+
+Build the JAR:
+
+```bash
+mvn clean
+mvn package -DskipTests
+```
+
+The artifact is at `ivory-cloud/cloudnative/target/cloudnative-1.0-SNAPSHOT.jar`.
+
+### Deploy the backend service
+
+```bash
+# Create the working directory
+mkdir -p /home/ivory
+
+# Copy the JAR
+cp cloudnative/target/cloudnative-1.0-SNAPSHOT.jar /home/ivory/
+
+# Create the config directory and copy config files
+mkdir -p /home/ivory/config
+cp cloudnative/src/main/resources/application.yaml /home/ivory/config/
+cp cloudnative/src/main/resources/application-native.yaml /home/ivory/config/
+cp cloudnative/src/main/resources/spring_pro_logback.xml /home/ivory/config/
+```
+
+### Configure the database connection
+
+Edit `/home/ivory/config/application-native.yaml` and replace the database URL, username, and password:
+
+```yaml
+datasource:
+  druid:
+    db-type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://127.0.0.1:5432/ivorysql
+    username: ivorysql
+    password: "your_password"
+```
+
+### Start the backend
+
+```bash
+# Install Java 1.8 if not present
+yum install -y java-1.8.0-openjdk.x86_64
+
+cd /home/ivory
+nohup java -jar cloudnative-1.0-SNAPSHOT.jar > log_native 2>&1 &
+
+# Verify it started
+ps -ef | grep java
+```
+
+---
+
+## Frontend deployment
+
+### Build the frontend
+
+```bash
+git clone https://github.com/IvorySQL/ivory-cloud-web.git
+cd ivory-cloud-web
+npm install
+npm run build:prod
+```
+
+This produces a `dist/` directory.
+
+### Deploy the built files
+
+```bash
+mkdir -p /opt/cloud/web
+cp -r dist /opt/cloud/web/
+
+# Set permissions
+chmod 755 /opt/cloud/web/dist
+chmod -R 777 /opt/cloud/web/dist
+```
+
+### Configure the API endpoint
+
+Edit `/opt/cloud/web/dist/config.js` and set `baseUrl` to the IP of your backend server:
+
+```js
+var PLATFROM_CONFIG = {};
+PLATFROM_CONFIG.baseUrl = "http://192.168.31.43:8081/cloudapi/api/v1";
+
+globalShowRegister = true;   // show Register button on login page
+disableNative = false;        // show cloud-native database option
+dbtype = "IvorySQL";
+dbversion = "5.0";
+```
+
+---
+
+## NGINX setup
+
+NGINX serves the frontend static files.
+
+### Install NGINX
+
+```bash
+# Install dependencies
+yum -y install pcre-devel openssl openssl-devel
+
+# Download and extract
+wget https://nginx.org/download/nginx-1.20.1.tar.gz
+tar -zxvf nginx-1.20.1.tar.gz
+cd nginx-1.20.1
+
+# Build and install to /opt/cloud/nginx
+./configure --prefix=/opt/cloud/nginx --with-http_ssl_module
+make && make install
+```
+
+### Configure NGINX
+
+Edit `/opt/cloud/nginx/conf/nginx.conf`. Add a server block pointing to the frontend files:
+
+```nginx
+server {
+    listen 9104;
+    server_name 192.168.31.43;   # replace with your server IP
+
+    location / {
+        root /opt/cloud/web/dist;
+        index index.html index.htm;
+    }
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root html;
+    }
+}
+```
+
+### Start NGINX
+
+```bash
+cd /opt/cloud/nginx/sbin
+./nginx -c /opt/cloud/nginx/conf/nginx.conf
+
+# Verify
+ps -ef | grep nginx
+```
+
+---
+
+## Operator deployment
+
+The IvorySQL Cloud platform requires `ivory-operator` to manage database clusters on Kubernetes.
+
+Install the operator:
+
+```bash
+git clone https://github.com/IvorySQL/ivory-operator.git
+cd ivory-operator
+kubectl apply -k examples/kustomize/install/namespace
+kubectl apply --server-side -k examples/kustomize/install/default
+```
+
+See the [IvorySQL Operator guide](/docs/v5/deploy/operator) for full documentation.
+
+---
+
+## Verify the installation
+
+Open a browser and navigate to `http://<your-server-ip>:9104/`.
+
+You should see the IvorySQL Cloud login page. Log in with the `admin` user to access the control plane.
+
+<Cards>
+  <Card href="/docs/v5/cloud-service/usage" title="User Guide" description="Provision databases, manage clusters, run backups, and monitor from the web UI." />
+  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Understand the operator that powers IvorySQL Cloud." />
+</Cards>

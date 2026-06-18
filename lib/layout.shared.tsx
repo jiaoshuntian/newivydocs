@@ -10,6 +10,7 @@ export function baseOptions(): BaseLayoutProps {
     links: [
       { url: '/docs/v5/getting-started', text: 'Getting Started' },
       { url: '/docs/v5/deploy', text: 'Deploy' },
+      { url: '/docs/v5/cloud-service', text: 'Cloud Service' },
       { url: '/docs/v5/oracle-compatibility', text: 'Oracle Compatibility' },
       { url: '/docs/v5/ecosystem', text: 'Ecosystem' },
       { url: '/docs/v5/monitor-manage', text: 'Monitor & Manage' },

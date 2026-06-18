@@ -1,167 +1,677 @@
 ---
 title: Data Types & Built-in Functions
-description: Oracle-compatible data types and built-in functions available in IvorySQL.
+description: Oracle-compatible data types and built-in functions available in IvorySQL — full reference with examples.
 ---
+
+import { Callout } from 'fumadocs-ui/components/callout';
 
 # Data Types & Built-in Functions
 
-IvorySQL provides Oracle-compatible data types and a comprehensive set of built-in functions so that Oracle applications can run with minimal changes.
+IvorySQL ships Oracle-compatible data types and built-in functions so that Oracle SQL and PL/SQL run with minimal changes. This page covers the full reference with working examples.
+
+<Callout type="info">
+All examples use `FROM dual`, which IvorySQL supports for Oracle compatibility. The `dual` table is a special single-row, single-column table used in Oracle to run expressions and function calls inside a `SELECT` statement.
+</Callout>
 
 ## Built-in Data Types
 
-| Type | Description |
-|---|---|
-| `char` | Fixed-length character string |
-| `varchar` | Variable-length character string |
-| `varchar2` | Oracle-compatible variable-length string |
-| `number` | Oracle-compatible numeric type |
-| `binary_float` | Single-precision floating point |
-| `binary_double` | Double-precision floating point |
-| `date` | Date and time |
-| `timestamp` | Timestamp without time zone |
-| `timestamp with time zone` | Timestamp with time zone |
-| `timestamp with local time zone` | Timestamp in session time zone |
-| `interval year to month` | Year-month interval |
-| `interval day to second` | Day-time interval |
-| `raw` | Raw binary data |
-| `long` | Large character data (legacy) |
+| Type | Oracle equivalent | Notes |
+|---|---|---|
+| `char` | `CHAR` | Fixed-length character string |
+| `varchar` | `VARCHAR` | Variable-length character string |
+| `varchar2` | `VARCHAR2` | Oracle-compatible variable-length string (preferred over `varchar` in Oracle mode) |
+| `number` | `NUMBER` | Exact numeric type; accepts `NUMBER(p,s)` precision/scale |
+| `binary_float` | `BINARY_FLOAT` | 32-bit IEEE 754 float |
+| `binary_double` | `BINARY_DOUBLE` | 64-bit IEEE 754 double |
+| `date` | `DATE` | Date and time (includes time component, unlike PostgreSQL `date`) |
+| `timestamp` | `TIMESTAMP` | High-precision timestamp, no time zone |
+| `timestamp with time zone` | `TIMESTAMP WITH TIME ZONE` | Timestamp with explicit time zone offset |
+| `timestamp with local time zone` | `TIMESTAMP WITH LOCAL TIME ZONE` | Stored as UTC, displayed in session time zone |
+| `interval year to month` | `INTERVAL YEAR TO MONTH` | Year-month duration |
+| `interval day to second` | `INTERVAL DAY TO SECOND` | Day-time duration with sub-second precision |
+| `raw` | `RAW` | Variable-length raw binary data |
+| `long` | `LONG` | Large character data — legacy type, prefer `clob` for new code |
 
-## Built-in Functions
+---
 
-### Date and Time Functions
+## Date & Time Functions
 
-| Function | Description |
-|---|---|
-| `sysdate` | Current system date |
-| `systimestamp` | Current system date and time with microseconds and time zone |
-| `add_months(date, n)` | Add n months to a date |
-| `last_day(date)` | Last day of the month |
-| `next_day(date, day)` | Next occurrence of a given day |
-| `months_between(date1, date2)` | Months between two dates |
-| `current_date` | Current date in session time zone |
-| `current_timestamp` | Current date and time with time zone |
-| `localtimestamp` | Session date and time (no time zone) |
-| `new_time(date, tz1, tz2)` | Convert date between time zones |
-| `tz_offset(tz)` | Time zone offset |
-| `trunc(date)` | Truncate date to specified precision |
-| `to_date(string)` | Convert string to date |
-| `to_timestamp(string)` | Convert string to timestamp |
-| `to_timestamp_tz(string)` | Convert string to timestamp with time zone |
-| `to_yminterval(string)` | Convert string to year-month interval |
-| `to_dsinterval(string)` | Convert string to day-second interval |
-| `numtodsinterval(n, unit)` | Convert number to day-second interval |
-| `numtoyminterval(n, unit)` | Convert number to year-month interval |
-| `from_tz(timestamp, tz)` | Attach time zone to timestamp |
-| `sys_extract_utc(timestamptz)` | Convert to UTC |
-| `sessiontimezone` | Current session time zone |
+### `sysdate`
 
-### String Functions
-
-| Function | Description |
-|---|---|
-| `instr(string, pattern)` | Find position of substring |
-| `instrb(string, pattern)` | Find position in bytes |
-| `substr(string, start)` | Extract substring by characters |
-| `substrb(string, start)` | Extract substring by bytes |
-| `trim(string)` | Remove leading and trailing spaces |
-| `ltrim(string)` | Remove leading spaces |
-| `rtrim(string)` | Remove trailing spaces |
-| `length(string)` | Character length |
-| `lengthb(string)` | Byte length |
-| `replace(string, from, to)` | Replace characters |
-| `regexp_replace(string, pattern, replacement)` | Regex-based replacement |
-| `regexp_substr(string, pattern)` | Regex-based extraction |
-| `regexp_instr(string, pattern)` | Regex-based position |
-| `regexp_like(column, pattern)` | Regex-based matching |
-| `asciistr(string)` | Convert to ASCII representation |
-| `to_multi_byte(string)` | Convert to full-width characters |
-| `to_single_byte(string)` | Convert to half-width characters |
-| `compose(string)` | Compose Unicode character |
-| `decompose(string)` | Decompose Unicode character |
-
-### Conversion Functions
-
-| Function | Description |
-|---|---|
-| `to_number(string, format)` | Convert string to number |
-| `to_char(date_or_number, format)` | Convert to character |
-
-### Other Functions
-
-| Function | Description |
-|---|---|
-| `rawtohex(raw)` | Convert raw to hex |
-| `hextoraw(string)` | Convert hex string to raw |
-| `uid` | Database instance ID |
-| `userenv(context)` | Current user environment info |
-| `sys_context(namespace, param)` | Context parameter value |
-
-## Usage Examples
-
-### sysdate
+Returns the current system date (date only, no time component in the default output).
 
 ```sql
+-- Current date
 SELECT sysdate() FROM dual;
 --  sysdate
 -- ------------
 --  2023-07-06
 
+-- Date arithmetic: yesterday
 SELECT sysdate() - 1 FROM dual;
 --  ?column?
 -- ------------
 --  2023-07-05
 ```
 
-### add_months
+### `systimestamp`
+
+Returns the current system date and time including microseconds and the local time zone.
 
 ```sql
+SELECT systimestamp() FROM dual;
+--  systimestamp
+-- -----------------------------------
+--  2023-07-06 10:18:31.674322 +08:00
+```
+
+### `add_months`
+
+Adds `n` months to a date and returns the same day of month `n` months later.
+
+```sql
+-- Next month
 SELECT add_months(sysdate(), 1) FROM dual;
 --  add_months
 -- ------------
 --  2023-08-06
 
+-- Previous month
 SELECT add_months(sysdate(), -1) FROM dual;
 --  add_months
 -- ------------
 --  2023-06-06
 ```
 
-### instr
+### `last_day`
+
+Returns the last day of the month containing the specified date.
 
 ```sql
+SELECT last_day(sysdate()) FROM dual;
+--  last_day
+-- ------------
+--  2023-07-31
+
+SELECT last_day(to_date('2019-09-01')) FROM dual;
+--  last_day
+-- ------------
+--  2019-09-30
+```
+
+### `next_day`
+
+Returns the next occurrence of a given day of the week after the specified date.
+The second argument is either an integer (1 = Sunday … 7 = Saturday) or a day name string.
+
+```sql
+-- Next day (integer)
+SELECT next_day(sysdate(), 1) FROM dual;
+--  next_day
+-- ------------
+--  2023-07-07
+
+-- Next Friday (string)
+SELECT next_day(sysdate(), 'FRIDAY') FROM dual;
+--  next_day
+-- ------------
+--  2023-07-07
+```
+
+### `months_between`
+
+Returns the number of months between two dates. Returns a positive value when `date1 > date2`, negative when `date1 < date2`. Returns a fraction when the two dates are not on the same day of the month (based on a 31-day month).
+
+```sql
+-- Same day, different months → integer result
+SELECT months_between(to_date('2023-07-06'), to_date('2023-08-06')) FROM dual;
+--  months_between
+-- ----------------
+--              -1
+
+-- Different days → fractional result
+SELECT months_between(to_date('2023-07-06'), to_date('2023-08-05')) FROM dual;
+--   months_between
+-- --------------------
+--  -0.967741935483871
+```
+
+### `current_date`
+
+Returns the current date in the session time zone.
+
+```sql
+SELECT current_date FROM dual;
+--  current_date
+-- --------------
+--  2023-07-06
+```
+
+### `current_timestamp`
+
+Returns the current date and time including the time zone. Accepts an optional precision argument.
+
+```sql
+SELECT current_timestamp FROM dual;
+--       current_timestamp
+-- -----------------------------------
+--  2023-07-06 10:27:01.440600 +08:00
+
+-- Precision: 3 decimal places
+SELECT current_timestamp(3) FROM dual;
+--       current_timestamp
+-- -----------------------------------
+--  2023-07-06 10:27:14.182000 +08:00
+```
+
+### `localtimestamp`
+
+Returns the current date and time in the session, without time zone information. Accepts an optional precision argument.
+
+```sql
+SELECT localtimestamp FROM dual;
+--        localtimestamp
+-- ----------------------------
+--  2023-07-07 09:18:15.896472
+
+-- With precision
+SELECT localtimestamp(1) FROM dual;
+--      localtimestamp
+-- ----------------------------
+--  2023-07-07 09:18:16.100000
+```
+
+### `new_time`
+
+Converts a date from one time zone to the equivalent date in another time zone.
+
+```sql
+SELECT sysdate() bj_time, new_time(sysdate(), 'PDT', 'GMT') los_angles FROM dual;
+--   bj_time   | los_angles
+-- ------------+------------
+--  2023-07-06 | 2023-07-06
+```
+
+### `tz_offset`
+
+Returns the offset of the given named time zone from UTC.
+
+```sql
+SELECT tz_offset('US/Eastern') FROM dual;
+--  tz_offset
+-- -----------
+--  -04:00
+```
+
+### `trunc` (date)
+
+Truncates a date to the specified unit. Omitting the unit truncates to day.
+
+```sql
+-- Truncate to day (default)
+SELECT trunc(sysdate()) FROM dual;
+--  trunc
+-- ------------
+--  2023-07-06
+
+-- Truncate to year (month and day reset to 01-01)
+SELECT trunc(sysdate(), 'yyyy') FROM dual;
+--     trunc
+-- ------------
+--  2023-01-01
+
+-- Truncate to month (day resets to 01)
+SELECT trunc(sysdate(), 'mm') FROM dual;
+--     trunc
+-- ------------
+--  2023-07-01
+```
+
+---
+
+## Timestamp & Interval Conversion Functions
+
+### `to_date`
+
+Converts a string to a `DATE`. The format string is optional — IvorySQL infers common formats automatically.
+
+```sql
+SELECT to_date('20230706') FROM dual;
+--   to_date
+-- ------------
+--  2023-07-06
+
+SELECT to_date('-44,0201', 'YYYY-MM-DD') FROM dual;
+--  to_date
+-- ------------
+--  0044-02-01
+```
+
+### `to_timestamp`
+
+Converts a string to a `TIMESTAMP`. Supports fractional seconds.
+
+```sql
+SELECT to_timestamp('20181102.12.34.56.025') FROM dual;
+--         to_timestamp
+-- ----------------------------
+--  2018-11-02 12:34:56.025000
+
+SELECT to_timestamp('2011,12,18 11:38 ', 'YYYY-MM-DD HH24:MI:SS') FROM dual;
+--        to_timestamp
+-- ----------------------------
+--  2011-12-18 11:38:00.000000
+```
+
+### `to_timestamp_tz`
+
+Converts a string to a `TIMESTAMP WITH TIME ZONE`.
+
+```sql
+SELECT to_timestamp_tz('2016-10-9 14:10:10.123000') FROM dual;
+--           to_timestamp_tz
+-- -----------------------------------
+--  2016-10-09 14:10:10.123000 +08:00
+
+SELECT to_timestamp_tz('10-9-2016 14:10:10.123000 +8:30',
+                       'DD-MM-YYYY HH24:MI:SS.FF TZH:TZM') FROM dual;
+--           to_timestamp_tz
+-- -----------------------------------
+--  2016-09-10 13:40:10.123000 +08:00
+```
+
+### `to_yminterval`
+
+Converts a string in `'YY-MM'` format to an `INTERVAL YEAR TO MONTH` value.
+
+```sql
+-- Add 2 years 8 months to a date
+SELECT to_date('20110101', 'yyyymmdd') + to_yminterval('02-08') FROM dual;
+--   ?column?
+-- ------------
+--  2013-09-01
+```
+
+### `to_dsinterval`
+
+Converts a string in `'D HH:MI:SS'` format to an `INTERVAL DAY TO SECOND` value.
+
+```sql
+-- Add 9 hours 30 minutes to the current time
+SELECT sysdate() + to_dsinterval('0 09:30:00') AS newdate FROM dual;
+--  newdate
+-- ------------
+--  2023-07-07
+```
+
+### `numtodsinterval`
+
+Converts a number and a unit string (`'day'`, `'hour'`, `'minute'`, `'second'`) to an `INTERVAL DAY TO SECOND`.
+
+```sql
+SELECT NUMTODSINTERVAL(100.00, 'hour');
+--         numtodsinterval
+-- -------------------------------
+--  +000000004 04:00:00.000000000
+
+SELECT NUMTODSINTERVAL(100, 'minute');
+--       numtodsinterval
+-- -------------------------------
+--  +000000000 01:40:00.000000000
+```
+
+### `numtoyminterval`
+
+Converts a number and a unit string (`'year'`, `'month'`) to an `INTERVAL YEAR TO MONTH`.
+
+```sql
+SELECT NUMTOYMINTERVAL(1.00, 'year');
+--  numtoyminterval
+-- -----------------
+--  +000000001-00
+
+SELECT NUMTOYMINTERVAL(1, 'month');
+--  numtoyminterval
+-- -----------------
+--  +000000000-01
+```
+
+### `from_tz`
+
+Attaches a time zone to a `TIMESTAMP`, returning a `TIMESTAMP WITH TIME ZONE`.
+
+```sql
+SELECT FROM_TZ(TIMESTAMP '2000-03-28 08:00:00', '3:00') FROM dual;
+--               from_tz
+-- -----------------------------------
+--  2000-03-28 13:00:00.000000 +08:00
+```
+
+### `sys_extract_utc`
+
+Converts a `TIMESTAMP WITH TIME ZONE` to UTC, stripping the time zone.
+
+```sql
+SELECT sys_extract_utc(TIMESTAMP '2000-03-28 11:30:00.00 -8:00') FROM dual;
+--       sys_extract_utc
+-- ----------------------------
+--  2000-03-28 19:30:00.000000
+```
+
+### `sessiontimezone`
+
+Returns the current session time zone name.
+
+```sql
+SELECT sessiontimezone() FROM dual;
+--  sessiontimezone
+-- -----------------
+--  Asia/Shanghai
+
+SET timezone = 'Asia/Hong_Kong';
+SELECT sessiontimezone() FROM dual;
+--  sessiontimezone
+-- -----------------
+--  Asia/Hong_Kong
+```
+
+---
+
+## String Functions
+
+### `instr`
+
+Searches for a pattern string inside a source string and returns the position of the match (1-based). Returns `0` if no match.
+
+Signatures:
+- `instr(source, pattern)` — first match from position 1
+- `instr(source, pattern, start_position, nth_appearance)` — nth match from start_position; negative start_position searches backward
+
+```sql
+-- First match (default)
 SELECT INSTR('database administration', 'data') FROM dual;
 --  instr
 -- -------
 --      1
 
+-- 2nd occurrence of 'i', starting at position 1
 SELECT INSTR('database administration', 'i', 1, 2) FROM dual;
 --  instr
 -- -------
 --     15
 
--- Reverse search
+-- Reverse search: 2nd 's' counting from 5 chars before the end
 SELECT INSTR('mississippi river', 's', -5, 2) FROM dual;
 --  instr
 -- -------
 --      6
 
--- Returns 0 when not found
+-- No match → 0
 SELECT INSTR('database administration', 'z') FROM dual;
 --  instr
 -- -------
 --      0
 ```
 
-### to_char
+Use `instr` instead of `LIKE` for existence checks:
 
 ```sql
-SELECT to_char(sysdate(), 'mm/dd/yyyy') FROM dual;
---  to_char
--- ------------
---  07/10/2023
+SELECT * FROM my_table WHERE instr(name, 'hello') > 0;
 ```
 
-### to_number
+### `instrb`
+
+Like `instr`, but positions and lengths are counted in bytes instead of characters. Useful for multibyte encodings.
+
+```sql
+SELECT INSTRB('CORPORATE FLOOR', 'OR') FROM dual;
+--  Instring in bytes
+-- -------------------
+--                  2
+
+-- 2nd occurrence of 'OR' starting from byte 5
+SELECT INSTRB('CORPORATE FLOOR', 'OR', 5, 2) FROM dual;
+--  Instring in bytes
+-- -------------------
+--                 14
+```
+
+### `substr`
+
+Extracts a substring by character position.
+
+```sql
+-- From position 5 to end
+SELECT SUBSTR('It is nice today', 5) FROM dual;
+--  Substring with bytes
+-- ----------------------
+--   s nice today
+```
+
+### `substrb`
+
+Extracts a substring by byte position. Useful for fixed-width multibyte character handling.
+
+```sql
+-- From byte 5 to end
+SELECT SUBSTRB('It is nice today', 5) FROM dual;
+--  Substring with bytes
+-- ----------------------
+--  s nice today
+
+-- Bytes 5 through 12 (8 bytes)
+SELECT SUBSTRB('It is nice today', 5, 8) FROM dual;
+--  Substring with bytes
+-- ----------------------
+--  s nice t
+```
+
+### `trim`
+
+Removes leading and trailing spaces, or optionally a specific string from both ends.
+
+```sql
+-- Remove whitespace
+SELECT trim('   aaa bbb ccc   ') FROM dual;
+--    trim
+-- -------------
+--  aaa bbb ccc
+
+-- Remove a specific string
+SELECT trim('aaa bbb ccc', 'aaa') FROM dual;
+--    trim
+-- ----------
+--   bbb ccc
+```
+
+### `ltrim`
+
+Removes leading spaces, or strips a set of characters from the left side until a character outside the set is found.
+
+```sql
+SELECT ltrim('   abcdefg   ') FROM dual;
+--      ltrim
+-- ------------
+--  abcdefg   
+
+-- Remove any leading character in 'fegab'
+SELECT ltrim('abcdefg', 'fegab') FROM dual;
+--  ltrim
+-- -------
+--  cdefg
+```
+
+### `rtrim`
+
+Removes trailing spaces, or strips a set of characters from the right side.
+
+```sql
+SELECT rtrim('   abcdefg   ') FROM dual;
+--       rtrim
+-- ----------------
+--     abcdefg
+
+-- Remove any trailing character in 'fegab'
+SELECT rtrim('abcdefg', 'fegab') FROM dual;
+--  rtrim
+-- -------
+--  abcd
+```
+
+### `length`
+
+Returns the number of characters in a string. Accepts numbers, which are converted to strings implicitly.
+
+```sql
+SELECT length(223) FROM dual;
+--  length
+-- --------
+--       3
+
+SELECT length('ivorysql database') FROM dual;
+--  length
+-- --------
+--      17
+```
+
+### `lengthb`
+
+Returns the byte length of a string. Results differ from `length` for multibyte characters.
+
+```sql
+SELECT lengthb('ivorysql database') FROM dual;
+--  lengthb
+-- ---------
+--       17
+```
+
+### `replace`
+
+Replaces occurrences of a search string within a source string. Omitting the replacement string deletes all matches.
+
+```sql
+-- Replace 'j' with 'bl'
+SELECT replace('jack and jue', 'j', 'bl') FROM dual;
+--      replace
+-- ----------------
+--  black and blue
+
+-- Delete all 'j'
+SELECT replace('jack and jue', 'j') FROM dual;
+--    replace
+-- ------------
+--  ack and ue
+```
+
+---
+
+## Regular Expression Functions
+
+### `regexp_replace`
+
+Extends `replace` with POSIX regular expression matching.
+
+```sql
+-- Replace all digits with *#
+SELECT regexp_replace('01234abcd56789', '[0-9]', '*#') FROM dual;
+--        regexp_replace
+-- --------------------------
+--  *#*#*#*#*#abcd*#*#*#*#*#
+
+-- Start replacement from position 2
+SELECT regexp_replace('01234abcd56789', '[0-9]', '*#', 2) FROM dual;
+--      regexp_replace
+-- -------------------------
+--  0*#*#*#*#abcd*#*#*#*#*#
+
+-- Delete '01'
+SELECT regexp_replace('01234abcd56789', '01') FROM dual;
+--  regexp_replace
+-- ----------------
+--  234abcd56789
+```
+
+### `regexp_substr`
+
+Extracts the substring that matches a regular expression pattern.
+
+```sql
+SELECT regexp_substr('012ab34', '012', 1) FROM dual;
+--  regexp_substr
+-- ---------------
+--  012
+
+-- Case-insensitive ('i' flag)
+SELECT regexp_substr('012a012Ab34', '012A', 1, 1, 'i') FROM dual;
+--  regexp_substr
+-- ---------------
+--  012a
+
+-- Case-sensitive ('c' flag)
+SELECT regexp_substr('012a012Ab34', '012A', 1, 1, 'c') FROM dual;
+--  regexp_substr
+-- ---------------
+--  012A
+```
+
+### `regexp_instr`
+
+Returns the start position of the substring that matches a regular expression.
+
+```sql
+-- First match
+SELECT regexp_instr('abcaBcabc', 'abc', 1) FROM dual;
+--  regexp_instr
+-- --------------
+--             1
+
+-- 3rd occurrence
+SELECT regexp_instr('abcaBcabc', 'abc', 1, 3) FROM dual;
+--  regexp_instr
+-- --------------
+--             7
+
+-- Position after the 2nd occurrence
+SELECT regexp_instr('abcaBcabc', 'abc', 1, 2, 1) FROM dual;
+--  regexp_instr
+-- --------------
+--             7
+```
+
+### `regexp_like`
+
+A predicate (returns boolean) for regex-based filtering. Used in `WHERE` clauses.
+
+```sql
+-- Setup
+CREATE TABLE t_regexp_like (id varchar(4), value varchar(10));
+INSERT INTO t_regexp_like VALUES ('1','1234560'), ('4','abc'),
+  ('5','abcde'), ('10','abcbvbnb');
+
+-- Match rows containing 'abc'
+SELECT * FROM t_regexp_like WHERE regexp_like(value, 'abc');
+--  id |  value
+-- ----+----------
+--   4 | abc
+--   5 | abcde
+--  10 | abcbvbnb
+
+-- Case-insensitive ('i' flag)
+SELECT * FROM t_regexp_like WHERE regexp_like(value, 'ABC', 'i');
+--  id |  value
+-- ----+----------
+--   4 | abc
+--   5 | abcde
+--  10 | abcbvbnb
+```
+
+---
+
+## Conversion Functions
+
+### `to_number`
+
+Converts a formatted string to a numeric type. The format string uses Oracle number format masks.
 
 ```sql
 SELECT to_number('-34,338,492', '99,999,999') FROM dual;
@@ -169,13 +679,191 @@ SELECT to_number('-34,338,492', '99,999,999') FROM dual;
 -- -----------
 --  -34338492
 
+-- Sign suffix format: 'S' matches trailing +/-
 SELECT to_number('5.01-', '9.99S') FROM dual;
 --  to_number
 -- -----------
 --  -5.01
 ```
 
-### sys_context
+### `to_char`
+
+Converts a number or date to a character string. Accepts an optional format string.
+
+```sql
+-- Date → string (default format)
+SELECT to_char(sysdate()) FROM dual;
+--   to_char
+-- ------------
+--  2023-07-10
+
+-- Date → custom format
+SELECT to_char(sysdate(), 'mm/dd/yyyy') FROM dual;
+--   to_char
+-- ------------
+--  07/10/2023
+
+-- Timestamp → string
+SELECT to_char(sysdate()::timestamp) FROM dual;
+--            to_char
+-- ----------------------------
+--  2023-07-10 09:46:44.000000
+
+-- Timestamp → custom format
+SELECT to_char(sysdate()::timestamp, 'MM-YYYY-DD') FROM dual;
+--   to_char
+-- ------------
+--  07-2023-10
+```
+
+### `rawtohex`
+
+Converts a `RAW` binary value to its hexadecimal string representation.
+
+```sql
+SELECT rawtohex('abc') FROM dual;
+--  rawtohex
+-- ----------
+--  616263
+```
+
+### `hextoraw`
+
+Converts a hexadecimal string to a `RAW` value.
+
+```sql
+SELECT hextoraw('abcdef') FROM dual;
+--  hextoraw
+-- ----------
+--  \xabcdef
+```
+
+---
+
+## Unicode & Character Set Functions
+
+### `asciistr`
+
+Returns an ASCII representation of a string. Non-ASCII characters are replaced with their Unicode escape sequences in `\XXXX` form.
+
+```sql
+-- ASCII-only string: unchanged
+SELECT asciistr('Hello, World!') FROM dual;
+--    asciistr
+-- ---------------
+--  Hello, World!
+
+-- Chinese characters
+SELECT asciistr('你好') FROM dual;
+--   asciistr
+-- ------------
+--  \4F60\597D
+
+-- Mixed
+SELECT asciistr('ABÄCDE') FROM dual;
+--   asciistr
+-- ------------
+--  AB\00C4CDE
+```
+
+### `to_multi_byte`
+
+Converts half-width (ASCII) characters to their full-width Unicode equivalents.
+
+```sql
+SELECT to_multi_byte('1.2'::text);
+--  to_multi_byte
+-- ---------------
+--  １．２
+```
+
+### `to_single_byte`
+
+Converts full-width Unicode characters to their half-width (ASCII) equivalents.
+
+```sql
+SELECT to_single_byte('１．２');
+--  to_single_byte
+-- ----------------
+--  1.2
+```
+
+### `compose`
+
+Combines a base character and a combining diacritic mark (specified as `chr(codepoint)`) into a single composite Unicode character.
+
+```sql
+-- 'a' + combining grave accent (U+0300) → à
+SELECT compose('a' || chr(768)) FROM dual;
+--  compose
+-- ---------
+--  à
+```
+
+### `decompose`
+
+Decomposes a composite Unicode character into its base character plus combining mark sequence.
+
+```sql
+-- é → e + U+0301 (combining acute accent)
+SELECT asciistr(decompose('é')) FROM dual;
+--  asciistr
+-- ----------
+--  e\0301
+```
+
+---
+
+## System & Environment Functions
+
+### `uid`
+
+Returns the numeric ID of the current database session.
+
+```sql
+SELECT uid() FROM dual;
+--  uid
+-- -----
+--   10
+```
+
+### `userenv`
+
+Returns information about the current user session. Common parameter values:
+
+| Parameter | Returns |
+|---|---|
+| `'isdba'` | `TRUE` if the current user has DBA privileges |
+| `'sessionid'` | Session identifier |
+| `'language'` | Session NLS language |
+| `'terminal'` | Terminal identifier |
+
+```sql
+SELECT userenv('isdba') FROM dual;
+--  get_isdba
+-- -----------
+--  TRUE
+
+SELECT userenv('sessionid') FROM dual;
+--  get_sessionid
+-- ---------------
+--  1
+```
+
+### `sys_context`
+
+Returns the value of a named parameter from a named application context. The built-in context is `'USERENV'`.
+
+Common `USERENV` parameters:
+
+| Parameter | Returns |
+|---|---|
+| `'DB_NAME'` | Current database name |
+| `'SESSION_USER'` | Current session username |
+| `'CURRENT_SCHEMA'` | Current default schema |
+| `'HOST'` | Client host name |
+| `'IP_ADDRESS'` | Client IP address |
+| `'LANGUAGE'` | Session language and territory |
 
 ```sql
 SELECT sys_context('USERENV', 'DB_NAME');
@@ -183,3 +871,60 @@ SELECT sys_context('USERENV', 'DB_NAME');
 -- -------------
 --  ivorysql
 ```
+
+---
+
+## Quick Reference
+
+All supported functions at a glance:
+
+| Function | Category |
+|---|---|
+| `sysdate` | Date & Time |
+| `systimestamp` | Date & Time |
+| `add_months` | Date & Time |
+| `last_day` | Date & Time |
+| `next_day` | Date & Time |
+| `months_between` | Date & Time |
+| `current_date` | Date & Time |
+| `current_timestamp` | Date & Time |
+| `localtimestamp` | Date & Time |
+| `new_time` | Date & Time |
+| `tz_offset` | Date & Time |
+| `trunc` (date) | Date & Time |
+| `to_date` | Conversion |
+| `to_timestamp` | Conversion |
+| `to_timestamp_tz` | Conversion |
+| `to_yminterval` | Conversion |
+| `to_dsinterval` | Conversion |
+| `numtodsinterval` | Conversion |
+| `numtoyminterval` | Conversion |
+| `from_tz` | Conversion |
+| `sys_extract_utc` | Conversion |
+| `sessiontimezone` | Time Zone |
+| `instr` | String |
+| `instrb` | String |
+| `substr` | String |
+| `substrb` | String |
+| `trim` | String |
+| `ltrim` | String |
+| `rtrim` | String |
+| `length` | String |
+| `lengthb` | String |
+| `replace` | String |
+| `regexp_replace` | Regex |
+| `regexp_substr` | Regex |
+| `regexp_instr` | Regex |
+| `regexp_like` | Regex |
+| `to_number` | Conversion |
+| `to_char` | Conversion |
+| `rawtohex` | Conversion |
+| `hextoraw` | Conversion |
+| `asciistr` | Unicode |
+| `to_multi_byte` | Unicode |
+| `to_single_byte` | Unicode |
+| `compose` | Unicode |
+| `decompose` | Unicode |
+| `uid` | System |
+| `userenv` | System |
+| `sys_context` | System |

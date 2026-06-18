@@ -1,0 +1,201 @@
+---
+title: Kubernetes
+description: Deploy IvorySQL on Kubernetes as a single-node pod or a Patroni-managed high-availability cluster using Helm.
+---
+
+# Kubernetes
+
+IvorySQL ships Kubernetes manifests for both single-node and high-availability deployments. The HA option uses Patroni for automatic leader election and failover.
+
+## Prerequisites
+
+- A running Kubernetes cluster
+- `kubectl` configured to reach the cluster
+- Helm installed (HA cluster only)
+
+---
+
+## Single-node deployment
+
+<Steps>
+
+### Create the namespace
+
+```bash
+kubectl create ns ivorysql
+```
+
+### Clone the manifest templates
+
+```bash
+git clone https://github.com/IvorySQL/docker_library.git
+cd docker_library/k8s-cluster/single
+```
+
+### Edit the StatefulSet
+
+Open `statefulset.yaml` and update the PVC storage configuration and database password to match your environment:
+
+```bash
+vim statefulset.yaml
+```
+
+### Apply the manifest
+
+```bash
+kubectl apply -f statefulset.yaml
+# service/ivorysql-svc created
+# statefulset.apps/ivorysql created
+```
+
+### Wait for the pod to be ready
+
+```bash
+kubectl get all -n ivorysql
+# NAME             READY   STATUS    RESTARTS   AGE
+# pod/ivorysql-0   1/1     Running   0          2m39s
+#
+# NAME                   TYPE       CLUSTER-IP       PORT(S)
+# service/ivorysql-svc   NodePort   10.108.178.236   5432:32106/TCP,1521:31887/TCP
+```
+
+### Connect
+
+PostgreSQL port:
+
+```bash
+psql -U ivorysql -p 32106 -h 127.0.0.1 -d ivorysql
+```
+
+Oracle-compatible port:
+
+```bash
+psql -U ivorysql -p 31887 -h 127.0.0.1 -d ivorysql
+```
+
+Verify the compatibility mode:
+
+```sql
+SHOW ivorysql.compatible_mode;
+--  ivorysql.compatible_mode
+-- --------------------------
+--  oracle
+```
+
+### Uninstall
+
+```bash
+kubectl delete -f statefulset.yaml
+```
+
+</Steps>
+
+---
+
+## High-availability cluster (Helm)
+
+The HA deployment uses [Patroni](https://patroni.readthedocs.io/) for automatic leader election. It requires [Helm](https://helm.sh/docs/intro/install/).
+
+<Steps>
+
+### Create the namespace
+
+```bash
+kubectl create ns ivorysql
+```
+
+### Clone the Helm chart templates
+
+```bash
+git clone https://github.com/IvorySQL/docker_library.git
+cd docker_library/k8s-cluster/ha-cluster/helm_charts
+```
+
+### Configure the cluster
+
+Edit `values.yaml` to adjust PVC settings, cluster size, and other options. For the database password, see `templates/secret.yaml`.
+
+```bash
+vim values.yaml
+```
+
+### Deploy with Helm
+
+```bash
+helm install ivorysql-ha-cluster -n ivorysql .
+# NAME: ivorysql-ha-cluster
+# STATUS: deployed
+```
+
+### Wait for all pods to be ready
+
+```bash
+kubectl get all -n ivorysql
+```
+
+Wait until all three Patroni pods show `1/1 Running`:
+
+```
+NAME                         READY   STATUS    RESTARTS   AGE
+pod/ivorysql-patroni-hac-0   1/1     Running   0          88s
+pod/ivorysql-patroni-hac-1   1/1     Running   0          64s
+pod/ivorysql-patroni-hac-2   1/1     Running   0          41s
+```
+
+### Connect to the primary
+
+PostgreSQL port:
+
+```bash
+psql -U ivorysql -p 32391 -h 127.0.0.1 -d ivorysql
+```
+
+Oracle-compatible port:
+
+```bash
+psql -U ivorysql -p 32477 -h 127.0.0.1 -d ivorysql
+```
+
+Confirm this is the primary:
+
+```sql
+SELECT pg_is_in_recovery();
+--  pg_is_in_recovery
+-- -------------------
+--  f
+```
+
+### Connect to a standby
+
+```bash
+psql -U ivorysql -p 30111 -h 127.0.0.1 -d ivorysql
+```
+
+```sql
+SELECT pg_is_in_recovery();
+--  t
+```
+
+### Uninstall
+
+```bash
+helm uninstall ivorysql-ha-cluster -n ivorysql
+```
+
+Remove the PVCs:
+
+```bash
+for i in 0 1 2; do
+  kubectl delete pvc ivyhac-config-ivorysql-patroni-hac-$i -n ivorysql
+  kubectl delete pvc pgdata-ivorysql-patroni-hac-$i -n ivorysql
+done
+```
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters declaratively on Kubernetes with a custom resource." />
+  <Card href="/docs/v5/cloud-service" title="IvorySQL Cloud" description="Fully managed IvorySQL with a web control plane — no cluster management required." />
+</Cards>

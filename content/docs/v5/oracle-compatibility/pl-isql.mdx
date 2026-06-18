@@ -1,55 +1,98 @@
 ---
 title: PL/iSQL & Stored Procedures
-description: Create Oracle-compatible functions and stored procedures using the PL/iSQL procedural language.
+description: Write Oracle-compatible functions and stored procedures in IvorySQL using PL/iSQL — PL/SQL syntax that runs on PostgreSQL.
 ---
 
 # PL/iSQL & Stored Procedures
 
-IvorySQL provides a PL/iSQL procedural language that is compatible with Oracle's PL/SQL. When Oracle clauses have a direct equivalent in IvorySQL, they are mapped automatically. When they do not, the syntax is implemented even if the underlying behavior differs.
+PL/iSQL is IvorySQL's Oracle-compatible procedural language. It accepts the same syntax as Oracle's PL/SQL, so you can migrate stored functions and procedures from an Oracle database to IvorySQL with little or no modification.
 
-## Function Syntax
+<Callout type="tip">
+**Migrating from Oracle?** Most PL/SQL function and procedure bodies work as-is. The main things to check are: `AUTHID` defaults, unsupported `SHARING` clauses (accepted but ignored), and Oracle-specific packages (`DBMS_*`) which need the IvorySQL equivalents.
+</Callout>
 
-### EDITIONABLE / NONEDITIONABLE
+## PL/iSQL vs PL/pgSQL
+
+| | PL/iSQL | PL/pgSQL |
+|--|---------|---------|
+| **Use when** | Migrating Oracle code, targeting Oracle syntax | Writing new PostgreSQL-native logic |
+| **Variable declaration** | Between `AS`/`IS` and `BEGIN`, no `DECLARE` keyword | Requires `DECLARE` block |
+| **Return type keyword** | `RETURN integer` | `RETURNS integer` |
+| **Statement terminator in psql** | `/` | `;` |
+| **Null-parameter call** | No parentheses needed | Requires `()` |
+
+Both languages coexist in IvorySQL. Choose PL/iSQL when you need Oracle syntax; choose PL/pgSQL for new code.
+
+## Write your first function
 
 ```sql
-CREATE OR REPLACE EDITIONABLE FUNCTION ora_func RETURN integer AS
+CREATE OR REPLACE FUNCTION greet(name IN VARCHAR2)
+RETURN VARCHAR2 IS
 BEGIN
-  RETURN 1;
+  RETURN 'Hello, ' || name || '!';
 END;
 /
 
-CREATE OR REPLACE NONEDITIONABLE FUNCTION ora_func RETURN integer IS
-BEGIN
-  RETURN 1;
-END;
-/
+SELECT greet('IvorySQL') FROM dual;
+--       greet
+-- ----------------
+--  Hello, IvorySQL!
 ```
 
-### RETURN and IS keywords
+Key differences from PL/pgSQL to notice:
+- `RETURN varchar2` (not `RETURNS`)
+- Variable declarations go directly after `IS`, no `DECLARE`
+- End with `/` in psql (not `;`)
+
+## Write your first procedure
 
 ```sql
-CREATE OR REPLACE EDITIONABLE FUNCTION ora_func RETURN integer IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### Functions without parameters (no parentheses required)
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = METADATA
+CREATE OR REPLACE PROCEDURE log_message(msg IN VARCHAR2)
 IS
 BEGIN
-  RETURN 1;
+  RAISE NOTICE '%', msg;
+END;
+/
+
+CALL log_message('Migration complete');
+-- NOTICE:  Migration complete
+```
+
+## Migrate an Oracle function
+
+Here is a typical Oracle function and its IvorySQL equivalent:
+
+**Oracle original:**
+```sql
+CREATE OR REPLACE FUNCTION calc_bonus(
+  salary IN NUMBER,
+  rate   IN NUMBER
+) RETURN NUMBER AS
+  bonus NUMBER;
+BEGIN
+  bonus := salary * rate;
+  RETURN bonus;
 END;
 /
 ```
 
-### No DECLARE keyword before variables
+**IvorySQL — identical syntax, works without changes:**
+```sql
+CREATE OR REPLACE FUNCTION calc_bonus(
+  salary IN NUMBER,
+  rate   IN NUMBER
+) RETURN NUMBER AS
+  bonus NUMBER;
+BEGIN
+  bonus := salary * rate;
+  RETURN bonus;
+END;
+/
+```
 
-Unlike PL/pgSQL, PL/iSQL does not require `DECLARE` before variable declarations in the function body:
+## Common syntax patterns
+
+### Functions with multiple parameters
 
 ```sql
 CREATE OR REPLACE FUNCTION ora_func(num1 IN int, num2 IN int)
@@ -72,278 +115,95 @@ SELECT ora_func(5, 9) FROM dual;
 --       630
 ```
 
-### Slash (`/`) as statement terminator
-
-In psql, use `/` to terminate a `CREATE FUNCTION` or `CREATE PROCEDURE` statement:
+### OUT parameters
 
 ```sql
-CREATE OR REPLACE FUNCTION my_func RETURN integer IS
+CREATE OR REPLACE PROCEDURE get_user(
+  user_id  IN  int,
+  username OUT VARCHAR2
+) IS
 BEGIN
-  RETURN 42;
+  SELECT name INTO username FROM users WHERE id = user_id;
 END;
 /
 ```
 
-### NOCOPY for OUT parameters
+See [OUT Parameters](/docs/v5/oracle-compatibility/out-parameter) for full usage including `NOCOPY`.
+
+### Call a function or procedure without parentheses
 
 ```sql
-CREATE OR REPLACE FUNCTION test_nocopy(
-  a IN int,
-  b OUT NOCOPY int,
-  c IN OUT NOCOPY int
-) RETURN int IS
+CREATE OR REPLACE FUNCTION get_timestamp RETURN TIMESTAMP IS
 BEGIN
-  b := a;
-  c := a;
-  RETURN 1;
+  RETURN SYSTIMESTAMP;
 END;
 /
+
+-- No parentheses when there are no parameters
+SELECT get_timestamp FROM dual;
 ```
 
-### SHARING clause
+### View Oracle-style catalog information
 
 ```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = METADATA
-IS
-BEGIN
-  RETURN 1;
-END;
-/
+-- List all procedures and functions visible to the current user
+SELECT object_name, object_type, status
+FROM user_procedures;
 
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE
-IS
-BEGIN
-  RETURN 1;
-END;
-/
+-- View function source
+SELECT text FROM user_source WHERE name = 'CALC_BONUS' ORDER BY line;
 ```
 
-### AUTHID (Invoker Rights)
+## Syntax reference
 
-The default permission is `DEFINER`.
+### Function declaration options
 
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID CURRENT_USER
-IS
-BEGIN
-  RETURN 1;
-END;
-/
+| Clause | Behavior in IvorySQL |
+|--------|----------------------|
+| `EDITIONABLE` / `NONEDITIONABLE` | Accepted, ignored (editions not supported) |
+| `SHARING = METADATA \| NONE` | Accepted, ignored |
+| `AUTHID CURRENT_USER` | Supported — function runs as caller |
+| `AUTHID DEFINER` | Default — function runs as owner |
+| `DETERMINISTIC` | Supported — maps to PostgreSQL `IMMUTABLE` |
+| `PARALLEL_ENABLE` | Accepted, ignored |
+| `RESULT_CACHE` | Accepted, ignored |
+| `PIPELINED` | Accepted, ignored |
+| `SQL_MACRO` | Accepted, ignored |
+| `ACCESSIBLE BY (...)` | Accepted, ignored |
+| `DEFAULT COLLATION` | Accepted, ignored |
 
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID DEFINER
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### ACCESSIBLE BY clause
-
-Restricts which objects can call a function:
+### ALTER FUNCTION / ALTER PROCEDURE
 
 ```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID DEFINER
-ACCESSIBLE BY (FUNCTION A.B, PROCEDURE C.D, PACKAGE E, TRIGGER F, TYPE G)
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### DEFAULT COLLATION
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID DEFINER
-ACCESSIBLE BY (FUNCTION A.B, PROCEDURE C.D)
-DEFAULT COLLATION USING_NLS_COMP
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### DETERMINISTIC
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID DEFINER
-DETERMINISTIC
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### PARALLEL_ENABLE
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID DEFINER
-PARALLEL_ENABLE
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### RESULT_CACHE
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SHARING = NONE AUTHID DEFINER
-RESULT_CACHE RELIES_ON (data_source1, data_source2)
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### PIPELINED
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-PIPELINED
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### SQL_MACRO
-
-```sql
-CREATE OR REPLACE FUNCTION ora_func RETURN integer
-SQL_MACRO
-IS
-BEGIN
-  RETURN 1;
-END;
-/
-```
-
-### ALTER FUNCTION
-
-```sql
-ALTER FUNCTION public.test_func NONEDITIONABLE;
 ALTER FUNCTION test_func COMPILE;
 ALTER FUNCTION test_func COMPILE DEBUG;
-ALTER FUNCTION test_func COMPILE DEBUG SD = MV;
-ALTER FUNCTION test_func COMPILE DEBUG REUSE SETTINGS;
-```
+ALTER FUNCTION public.test_func NONEDITIONABLE;
 
-## Procedure Syntax
-
-### EDITIONABLE / NONEDITIONABLE
-
-```sql
-CREATE OR REPLACE EDITIONABLE PROCEDURE ora_procedure
-IS
-  p integer := 20;
-BEGIN
-  RAISE NOTICE '%', p;
-END;
-/
-
-CREATE OR REPLACE NONEDITIONABLE PROCEDURE ora_procedure
-IS
-  p integer := 20;
-BEGIN
-  RAISE NOTICE '%', p;
-END;
-/
-```
-
-### Procedures without parameters
-
-```sql
-CREATE OR REPLACE EDITIONABLE PROCEDURE ora_procedure
-IS
-  p integer := 20;
-BEGIN
-  RAISE NOTICE '%', p;
-END;
-/
-```
-
-### SHARING clause
-
-```sql
-CREATE OR REPLACE PROCEDURE ora_procedure
-SHARING = METADATA
-IS
-  p integer := 20;
-BEGIN
-  RAISE NOTICE '%', p;
-END;
-/
-```
-
-### AUTHID
-
-```sql
-CREATE OR REPLACE PROCEDURE ora_procedure
-SHARING = METADATA
-AUTHID CURRENT_USER
-IS
-  p integer := 20;
-BEGIN
-  RAISE NOTICE '%', p;
-END;
-/
-```
-
-### ALTER PROCEDURE
-
-```sql
 ALTER PROCEDURE test_proc EDITIONABLE;
-ALTER PROCEDURE public.test_proc NONEDITIONABLE;
 ALTER PROCEDURE test_proc COMPILE;
-ALTER PROCEDURE test_proc COMPILE DEBUG;
 ```
 
-## Calling Functions Without Parentheses
+## System views
 
-Functions and procedures can be called without parentheses when they have no parameters:
+Oracle-compatible catalog views are available for introspecting procedures and functions:
 
-```sql
-CREATE OR REPLACE FUNCTION f_noparentheses RETURN int IS
-BEGIN
-  RETURN 11;
-END;
-/
+| View | Scope |
+|------|-------|
+| `DBA_PROCEDURES` | All procedures/functions in the database |
+| `ALL_PROCEDURES` | Procedures/functions accessible to current user |
+| `USER_PROCEDURES` | Procedures/functions owned by current user |
+| `DBA_SOURCE` / `ALL_SOURCE` / `USER_SOURCE` | Source code |
+| `DBA_ARGUMENTS` / `ALL_ARGUMENTS` / `USER_ARGUMENTS` | Parameter definitions |
 
-SELECT f_noparentheses FROM dual;
+## Backup and export
 
-CREATE OR REPLACE PROCEDURE protest AS
-BEGIN
-  RAISE NOTICE 'protest';
-END;
-/
+When `pg_dump` exports PL/iSQL functions and procedures, it appends `/` at the end of each definition — ensuring the exported SQL can be re-run without modification.
 
-CALL protest();
-```
+## Next steps
 
-## Related System Views
-
-Oracle-compatible catalog views are available in `contrib/ivorysql_ora/src/sysview/sysview--1.0.sql`, including:
-
-- `DBA_PROCEDURES`, `ALL_PROCEDURES`, `USER_PROCEDURES`
-- `DBA_SOURCE`, `ALL_SOURCE`, `USER_SOURCE`
-- `DBA_ARGUMENTS`, `ALL_ARGUMENTS`, `USER_ARGUMENTS`
-
-## Backup
-
-When `pg_dump` exports functions and procedures, it appends a slash (`/`) at the end of each definition to ensure compatibility with Oracle-style terminators.
+<Cards>
+  <Card href="/docs/v5/oracle-compatibility/packages" title="Packages" description="Group related functions and procedures into Oracle-style packages." />
+  <Card href="/docs/v5/oracle-compatibility/anonymous-block" title="Anonymous Block" description="Run PL/iSQL code inline without creating a persistent function." />
+  <Card href="/docs/v5/oracle-compatibility/out-parameter" title="OUT Parameters" description="Full IN/OUT/IN OUT parameter syntax including NOCOPY." />
+  <Card href="/docs/v5/migration" title="Migrate from Oracle" description="Use Ora2Pg to automate schema and data export from an Oracle database." />
+</Cards>
