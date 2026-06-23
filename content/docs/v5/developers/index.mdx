@@ -29,9 +29,16 @@ IvorySQL builds on PostgreSQL by introducing a dual-parser framework, a custom p
   <Card href="/docs/v5/developers/built-in-functions/userenv" title="USERENV" description="Implementation of the legacy USERENV function and its parameter-to-SQL mapping." />
 </Cards>
 
+## Compatibility Framework
+
+<Cards>
+  <Card href="/docs/v5/developers/compatibility-framework" title="Compatibility Framework" description="How the dual-port, dual-parser, GUC framework, and dual-mode initdb work together to deliver Oracle compatibility." />
+</Cards>
+
 ## Compatibility Implementation Details
 
 <Cards>
+  <Card href="/docs/v5/developers/compatibility-impl" title="Overview" description="Introduction to all Oracle-compatible feature implementations and the NLS parameter reference." />
   <Card href="/docs/v5/developers/compatibility-impl/like" title="LIKE Operator" description="Extending the LIKE operator to work with Oracle data types via varchar2 and implicit type conversion." />
   <Card href="/docs/v5/developers/compatibility-impl/out-parameter" title="OUT Parameters" description="Functions, procedures, and anonymous blocks with OUT parameters, plus libpq interface support." />
   <Card href="/docs/v5/developers/compatibility-impl/rowid" title="RowID Column" description="Oracle-compatible RowID pseudo-column using table OID and sequence-based unique identifiers." />

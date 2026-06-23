@@ -1,0 +1,129 @@
+---
+title: Compatibility Framework
+description: How IvorySQL's dual-parser, dual-port, GUC framework, and dual-mode initdb work together to deliver Oracle compatibility on top of PostgreSQL.
+---
+
+# Compatibility Framework
+
+IvorySQL delivers Oracle compatibility without forking the PostgreSQL codebase. Instead, it introduces a layered framework — dual-port, dual-parser, GUC extensions, and a dual-mode `initdb` — that intercepts and routes execution at well-defined boundaries, minimising changes to the upstream PG engine.
+
+This page covers the architectural design of that framework. For user-facing behaviour, see [Oracle Compatibility](/docs/v5/oracle-compatibility). For specific feature implementations, see [Compatibility Implementation Details](/docs/v5/developers/compatibility-impl).
+
+## Overview
+
+The framework has four interlocking components:
+
+| Component | Purpose |
+|-----------|---------|
+| **Dual-port** | Separate TCP port (default 1521) enters Oracle mode automatically |
+| **Dual-parser** | Dedicated Oracle SQL grammar (`ora_gram.y`) isolated from PG grammar |
+| **GUC framework** | Unified location (`ivy_guc.c`) for all Oracle-compatibility GUC parameters |
+| **Dual-mode initdb** | `-m oracle` / `-m pg` flag selects which BKI catalog SQL is loaded at init time |
+
+## Dual-Port Design
+
+IvorySQL runs two listener endpoints simultaneously:
+
+- **Port 5432** — standard PostgreSQL port, PG-compatible mode by default.
+- **Port 1521** — Oracle-compatible port; every connection that arrives here automatically sets `ivorysql.compatible_mode = oracle`.
+
+Connecting on port 5432 and requiring Oracle mode is also supported:
+
+```sql
+SET ivorysql.compatible_mode = oracle;
+```
+
+This design keeps the two SQL dialects fully isolated at the network boundary with no changes to the core PG authentication or connection-handling paths.
+
+## Dual-Parser Design
+
+Oracle SQL and PostgreSQL SQL have enough syntactic overlap that a single merged grammar would produce irreducible conflicts. IvorySQL solves this by maintaining two independent parser modules:
+
+- **PG parser** — the upstream `gram.y`, unchanged.
+- **Oracle parser** — `ora_gram.y`, which handles Oracle-specific syntax extensions.
+
+The active parser is selected per-connection based on `ivorysql.compatible_mode`. Oracle-specific constructs (e.g., `VARCHAR2`, `NUMBER`, `ROWID` pseudo-column, PL/iSQL block syntax) are parsed by `ora_gram.y` and never reach the PG grammar, eliminating cross-dialect interference.
+
+## PL/iSQL Procedural Language
+
+Alongside the dual-parser, IvorySQL adds **PL/iSQL** — a procedural language compatible with Oracle's PL/SQL:
+
+- Shares the dual-parser boundary: PL/iSQL blocks are dispatched to the Oracle procedural executor.
+- Supports Oracle PL/SQL constructs: `%TYPE`, `%ROWTYPE`, `OUT` parameters, nested subfunctions, `CALL INTO`, anonymous blocks, and packages.
+- The PL/iSQL executor is separate from PL/pgSQL; both coexist without interference.
+
+## GUC Framework
+
+All Oracle-compatibility GUC parameters are registered in a single file: **`ivy_guc.c`**. This keeps Oracle-specific configuration isolated from the upstream GUC registration paths and makes it easy to audit or extend the parameter set.
+
+The five typed arrays in `ivy_guc.c` mirror the upstream GUC registration API:
+
+| Array | Type |
+|-------|------|
+| `Ivy_ConfigureNamesBool` | Boolean parameters |
+| `Ivy_ConfigureNamesInt` | Integer parameters |
+| `Ivy_ConfigureNamesString` | String parameters |
+| `Ivy_ConfigureNamesReal` | Floating-point parameters |
+| `Ivy_ConfigureNamesEnum` | Enum parameters |
+
+To add a new compatibility GUC, append an entry to the appropriate array — no changes to upstream files are required.
+
+### Current GUC Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ivorysql.compatible_mode` | Active dialect (`pg` or `oracle`). Settable per session; `RESET ALL` reverts to the connection-time value. |
+| `ivorysql.database_mode` | Initialization-time mode (`pg` or `oracle`). Read-only; not affected by `SET`/`RESET`. |
+| `ivorysql.datetime_ignore_nls_mask` | Bitmask controlling which date/time types skip NLS formatting (0–15). |
+| `ivorysql.enable_emptystring_to_NULL` | When `on`, empty string literals are stored as `NULL`. |
+| `ivorysql.identifier_case_switch` | Quoted identifier case conversion mode. |
+| `ivorysql.listen_address` | Listener address for the Oracle-compatible port. Requires restart. |
+| `ivorysql.port` | Port number for Oracle-compatible connections. Requires restart. |
+| `nls_date_format` | Default `DATE` format string. Default: `YYYY-MM-DD`. |
+| `nls_length_semantics` | Length unit for `CHAR`/`VARCHAR`/`VARCHAR2` modifiers (`BYTE` or `CHAR`). |
+| `nls_timestamp_format` | Default `TIMESTAMP` format string. |
+| `nls_timestamp_tz_format` | Default `TIMESTAMP WITH TIME ZONE` format string. |
+| `shared_preload_libraries` | Read from `ivorysql.conf` at init; requires restart. |
+
+### `datetime_ignore_nls_mask` Bitmask
+
+The lower four bits of this integer each suppress NLS formatting for one date/time type:
+
+| Bit | Type suppressed |
+|-----|----------------|
+| `0x01` | `DATE` |
+| `0x02` | `TIMESTAMP` |
+| `0x04` | `TIMESTAMP WITH TIME ZONE` |
+| `0x08` | `TIMESTAMP WITH LOCAL TIME ZONE` |
+
+Setting the mask to `15` disables NLS formatting for all date/time types, reverting to PostgreSQL default behavior.
+
+## Dual-Mode `initdb`
+
+The `-m` flag on `initdb` selects the database mode at cluster creation time:
+
+```bash
+# Oracle-compatible mode (default)
+./initdb -D data -m oracle
+
+# PostgreSQL mode
+./initdb -D data -m pg
+```
+
+If `-m` is omitted, Oracle-compatible mode is the default.
+
+The mode is stored in `database_mode` and consulted at startup. In Oracle mode, `initdb` additionally loads `postgres_oracle.bki`, which registers Oracle-specific catalog entries (types, operators, functions) required by the compatibility layer.
+
+<Callout type="warn">
+  `database_mode` is set at initialization time and is **read-only** for the lifetime of the cluster. It cannot be changed with `SET` or `RESET`. If you need to switch modes, reinitialize the cluster.
+</Callout>
+
+## Source File Map
+
+| Component | Key Files |
+|-----------|-----------|
+| Oracle parser | `src/backend/parser/ora_gram.y` |
+| PL/iSQL executor | `src/pl/plisql/` |
+| GUC registration | `src/backend/utils/misc/ivy_guc.c` |
+| Dual-mode initdb | `src/bin/initdb/initdb.c`, `src/backend/catalog/postgres_oracle.bki` |
+| Port routing | `src/backend/postmaster/postmaster.c` |

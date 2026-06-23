@@ -1,4 +1,4 @@
 {
   "title": "Developers",
-  "pages": ["index", "app-guide", "contributing", "architecture", "built-in-functions", "compatibility-impl"]
+  "pages": ["index", "app-guide", "contributing", "compatibility-framework", "architecture", "built-in-functions", "compatibility-impl"]
 }
