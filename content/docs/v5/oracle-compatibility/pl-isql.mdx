@@ -183,6 +183,137 @@ ALTER PROCEDURE test_proc EDITIONABLE;
 ALTER PROCEDURE test_proc COMPILE;
 ```
 
+## Advanced clause syntax
+
+### ACCESSIBLE BY — restrict callers
+
+Control which program units may call a function or procedure. IvorySQL accepts the syntax but does not enforce the restriction — it is parsed for Oracle migration compatibility.
+
+```sql
+-- Allow access only by a specific function and procedure
+CREATE OR REPLACE FUNCTION get_salary(emp_id IN int) RETURN NUMBER
+SHARING = NONE AUTHID DEFINER
+ACCESSIBLE BY ( FUNCTION hr.calc_bonus, PROCEDURE hr.update_payroll )
+IS
+  v_salary NUMBER;
+BEGIN
+  SELECT salary INTO v_salary FROM employees WHERE id = emp_id;
+  RETURN v_salary;
+END;
+/
+
+-- Multiple accessor types: FUNCTION, PROCEDURE, PACKAGE, TRIGGER, TYPE
+CREATE OR REPLACE FUNCTION internal_lookup RETURN VARCHAR2
+AUTHID DEFINER
+ACCESSIBLE BY ( FUNCTION app.caller_fn, PROCEDURE app.caller_proc,
+                PACKAGE app.utils, TRIGGER app.audit_trg, TYPE app.obj_type )
+IS
+BEGIN
+  RETURN 'ok';
+END;
+/
+```
+
+### PARALLEL_ENABLE with partitioning
+
+For functions used in parallel queries, you can specify how rows are partitioned among parallel execution servers:
+
+```sql
+CREATE OR REPLACE FUNCTION score_row(emp_id IN int) RETURN NUMBER
+PARALLEL_ENABLE ( PARTITION emp_id BY RANGE ( dept_id, salary )
+                  CLUSTER emp_id BY ( dept_id ) )
+IS
+BEGIN
+  RETURN 1;
+END;
+/
+```
+
+<Callout type="tip">
+`PARALLEL_ENABLE` with `PARTITION` syntax is accepted by IvorySQL's parser for Oracle compatibility. The partitioning hint itself has no effect — IvorySQL's query planner controls parallelism independently.
+</Callout>
+
+### RESULT_CACHE with RELIES_ON
+
+```sql
+-- Cache result, invalidate when specified tables change
+CREATE OR REPLACE FUNCTION get_config(key IN VARCHAR2) RETURN VARCHAR2
+RESULT_CACHE RELIES_ON ( app_config, app_defaults )
+IS
+  v_val VARCHAR2(256);
+BEGIN
+  SELECT value INTO v_val FROM app_config WHERE name = key;
+  RETURN v_val;
+END;
+/
+
+-- RESULT_CACHE RELIES_ON () with empty list is also accepted
+CREATE OR REPLACE FUNCTION static_value RETURN int
+RESULT_CACHE RELIES_ON ()
+IS
+BEGIN
+  RETURN 42;
+END;
+/
+```
+
+### AGGREGATE USING
+
+Associate a function with a custom aggregate implementation:
+
+```sql
+CREATE OR REPLACE FUNCTION agg_handler RETURN NUMBER
+AGGREGATE USING my_schema.my_aggregate_type
+IS
+BEGIN
+  RETURN 1;
+END;
+/
+```
+
+### Comments in function bodies
+
+Both Oracle comment styles are supported inside PL/iSQL function and procedure bodies:
+
+```sql
+CREATE OR REPLACE FUNCTION commented_func(n IN int) RETURN int IS
+  -- single-line comment
+  result int; /* inline comment */
+BEGIN
+  /*
+   * Multi-line block comment.
+   * Both styles work identically.
+   */
+  result := n * 2;
+  RETURN result;
+END;
+/
+```
+
+### ALTER … COMPILE variants
+
+```sql
+-- Recompile only
+ALTER FUNCTION my_func COMPILE;
+
+-- Compile with debug info
+ALTER FUNCTION my_func COMPILE DEBUG;
+
+-- Compile with debug and session-level settings
+ALTER FUNCTION my_func COMPILE DEBUG sd = mv;
+
+-- Compile and reuse current session settings
+ALTER FUNCTION my_func COMPILE DEBUG REUSE SETTINGS;
+
+-- Same variants apply to procedures
+ALTER PROCEDURE my_proc COMPILE;
+ALTER PROCEDURE my_proc COMPILE DEBUG REUSE SETTINGS;
+
+-- Edition control
+ALTER FUNCTION my_func EDITIONABLE;
+ALTER FUNCTION public.my_func NONEDITIONABLE;
+```
+
 ## System views
 
 Oracle-compatible catalog views are available for introspecting procedures and functions:

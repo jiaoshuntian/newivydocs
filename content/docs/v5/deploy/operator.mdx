@@ -1,19 +1,27 @@
 ---
 title: IvorySQL Operator
-description: Manage IvorySQL clusters on Kubernetes declaratively using the IvorySQL Operator (IVYO) and custom resources.
+description: Manage IvorySQL clusters on Kubernetes declaratively using the IvorySQL Operator (IVYO) and IvoryCluster custom resources.
 ---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
 
 # IvorySQL Operator
 
-The IvorySQL Operator (IVYO) lets you manage IvorySQL clusters on Kubernetes using a `IvoryCluster` custom resource. IVYO handles provisioning, failover, backup scheduling, and TLS — you declare the desired state, IVYO reconciles it.
+The IvorySQL Operator (IVYO) lets you manage IvorySQL clusters on Kubernetes using an `IvoryCluster` custom resource. IVYO handles provisioning, failover, backup scheduling, and TLS — you declare the desired state and IVYO reconciles it.
 
 <Callout type="tip">
-IVYO is the recommended way to run IvorySQL on Kubernetes for production workloads. For simpler setups, see [Kubernetes StatefulSet](/docs/v5/deploy/kubernetes) or [IvorySQL Cloud](/docs/v5/cloud-service).
+IVYO is the recommended way to run IvorySQL on Kubernetes for production workloads. For simpler setups see [Kubernetes StatefulSet](/docs/v5/deploy/kubernetes) or [IvorySQL Cloud](/docs/v5/cloud-service).
 </Callout>
+
+---
 
 ## Install the Operator
 
 <Steps>
+
+<Step>
 
 ### Clone the operator repository
 
@@ -30,6 +38,10 @@ git clone https://github.com/IvorySQL/ivory-operator.git
 cd ivory-operator
 ```
 
+</Step>
+
+<Step>
+
 ### Install the CRDs and Operator
 
 ```bash
@@ -43,11 +55,19 @@ Verify the operator pod is running:
 kubectl get pods -n ivory-operator
 ```
 
+</Step>
+
 </Steps>
 
-## Create a cluster
+Use `kubectl explain ivorycluster` to introspect the full CRD schema at any time.
+
+---
+
+## Create a Cluster
 
 <Steps>
+
+<Step>
 
 ### Apply the example cluster manifest
 
@@ -56,6 +76,10 @@ kubectl apply -k examples/kustomize/ivory
 ```
 
 This creates a cluster named `hippo` in the `ivory-operator` namespace.
+
+</Step>
+
+<Step>
 
 ### Track cluster status
 
@@ -70,9 +94,13 @@ kubectl -n ivory-operator get pods \
   --selector=ivory-operator.ivorysql.org/cluster=hippo,ivory-operator.ivorysql.org/instance
 ```
 
+</Step>
+
+<Step>
+
 ### Understand what was created
 
-The example `ivory.yaml` defines the cluster:
+The example `ivory.yaml` defines the cluster. Key fields:
 
 ```yaml
 apiVersion: ivory-operator.ivorysql.org/v1beta1
@@ -104,11 +132,17 @@ spec:
                   storage: 1Gi
 ```
 
-IVYO reads `metadata.name` for the cluster name, `spec.instances` to decide how many replicas to create, and `spec.backups` to configure pgBackRest for WAL archiving and backups.
+- `metadata.name` — sets the cluster name
+- `spec.instances` — controls how many replicas to create
+- `spec.backups.pgbackrest` — configures pgBackRest for WAL archiving and backups
+
+</Step>
 
 </Steps>
 
-## Connect to the cluster
+---
+
+## Connect to the Cluster
 
 IVYO creates Kubernetes Services and injects connection details into a Secret automatically.
 
@@ -123,7 +157,7 @@ The primary connection secret is named `hippo-pguser-hippo` and contains:
 
 | Key | Value |
 |-----|-------|
-| `host` | The primary Service DNS name |
+| `host` | Primary Service DNS name |
 | `port` | Database port (5432) |
 | `user` | Database username |
 | `password` | Database password |
@@ -147,7 +181,7 @@ env:
         key: password
 ```
 
-### List the Services
+### Services overview
 
 ```bash
 kubectl -n ivory-operator get svc \
@@ -158,41 +192,827 @@ kubectl -n ivory-operator get svc \
 # hippo-replicas    ClusterIP   10.98.110.215   5432/TCP
 ```
 
-Use `hippo-primary` for read/write connections and `hippo-replicas` for read-only connections.
+Use `hippo-primary` for read/write and `hippo-replicas` for read-only connections.
 
-## Expose the cluster externally
-
-To access the cluster from outside Kubernetes, change the Service type to `NodePort`:
+### Expose the cluster externally (NodePort)
 
 ```yaml
 spec:
   service:
+    metadata:
+      annotations:
+        my-annotation: value1
+      labels:
+        my-label: value2
     type: NodePort
     nodePort: 32000
 ```
 
-Apply the change and confirm:
+<Callout type="warn">
+If you expose services externally with TLS verification, you must configure [custom TLS](#custom-tls) — the default IVYO certificate CN only matches the internal service name.
+</Callout>
+
+---
+
+## High Availability
+
+### Add replicas
+
+Set `spec.instances.replicas` to add standby replicas:
+
+```yaml
+spec:
+  instances:
+    - name: instance1
+      replicas: 2
+      dataVolumeClaimSpec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+```
+
+Apply with `kubectl apply -k examples/kustomize/ivory` and watch the new instance initialize:
 
 ```bash
-kubectl -n ivory-operator get svc --selector=ivory-operator.ivorysql.org/cluster=hippo
-# NAME      TYPE       PORT(S)
-# hippo-ha  NodePort   5432:32000/TCP
+kubectl -n ivory-operator get pods \
+  --selector=ivory-operator.ivorysql.org/cluster=hippo,ivory-operator.ivorysql.org/instance-set
 ```
+
+### Test HA: delete a Service
+
+IVYO immediately recreates any managed Service that is deleted — your application may not even notice:
+
+```bash
+kubectl -n ivory-operator delete svc hippo-primary
+# IVYO recreates it within seconds
+kubectl -n ivory-operator get svc --selector=ivory-operator.ivorysql.org/cluster=hippo
+```
+
+### Test HA: delete the primary StatefulSet
+
+```bash
+# Find the current primary
+PRIMARY_POD=$(kubectl -n ivory-operator get pods \
+  --selector=ivory-operator.ivorysql.org/role=master \
+  -o jsonpath='{.items[*].metadata.labels.ivory-operator\.ivorysql\.org/instance}')
+
+# Delete the StatefulSet
+kubectl delete sts -n ivory-operator "${PRIMARY_POD}"
+```
+
+IVYO recreates the StatefulSet and Patroni promotes a replica — failover happens independently of IVYO.
+
+### Synchronous replication
+
+```yaml
+spec:
+  patroni:
+    dynamicConfiguration:
+      synchronous_mode: true
+      postgresql:
+        parameters:
+          synchronous_commit: "on"
+```
+
+To prevent all writes when no synchronous replica is available:
+
+```yaml
+spec:
+  patroni:
+    dynamicConfiguration:
+      synchronous_mode: true
+      synchronous_mode_strict: true
+```
+
+### Pod anti-affinity
+
+Spread replicas across nodes so a single node failure does not take down all instances.
+
+<Tabs items={['Preferred (best-effort)', 'Required (strict)']}>
+<Tab>
+```yaml
+spec:
+  instances:
+    - name: instance1
+      replicas: 2
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    ivory-operator.ivorysql.org/cluster: hippo
+                    ivory-operator.ivorysql.org/instance-set: instance1
+```
+</Tab>
+<Tab>
+```yaml
+spec:
+  instances:
+    - name: instance1
+      replicas: 2
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  ivory-operator.ivorysql.org/cluster: hippo
+                  ivory-operator.ivorysql.org/instance-set: instance1
+```
+</Tab>
+</Tabs>
+
+### Node affinity
+
+Assign instances to nodes with specific hardware (e.g. nodes labeled `workload-role=db`):
+
+```yaml
+spec:
+  instances:
+    - name: instance1
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values:
+                      - db
+```
+
+### Topology spread constraints
+
+For finer-grained distribution across zones or node groups:
+
+```yaml
+spec:
+  instances:
+    - name: instance1
+      replicas: 5
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: my-node-label
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              ivory-operator.ivorysql.org/instance-set: instance1
+```
+
+---
+
+## Resize a Cluster
+
+### Resize CPU and memory
+
+IVYO performs a rolling update — replicas are updated first, then the primary is switched over, so there is minimal downtime:
+
+```yaml
+spec:
+  instances:
+    - name: instance1
+      replicas: 2
+      resources:
+        limits:
+          cpu: 2.0
+          memory: 4Gi
+```
+
+Watch the rolling update:
+
+```bash
+watch "kubectl -n ivory-operator get pods \
+  --selector=ivory-operator.ivorysql.org/cluster=hippo,ivory-operator.ivorysql.org/instance \
+  -o=jsonpath='{range .items[*]}{.metadata.name}{\"\t\"}{.metadata.labels.ivory-operator\.ivorysql\.org/role}{\"\t\"}{.status.phase}{\"\n\"}{end}'"
+```
+
+### Resize PVCs (storage class supports expansion)
+
+Update `dataVolumeClaimSpec.resources.requests.storage` and apply:
+
+```yaml
+spec:
+  instances:
+    - name: instance1
+      dataVolumeClaimSpec:
+        resources:
+          requests:
+            storage: 10Gi   # increased from 1Gi
+  backups:
+    pgbackrest:
+      repos:
+        - name: repo1
+          volume:
+            volumeClaimSpec:
+              resources:
+                requests:
+                  storage: 20Gi
+```
+
+<Callout type="info">
+PVCs can only be **sized up**. Check that your storage class has `allowVolumeExpansion: true` via `kubectl get sc`.
+</Callout>
+
+### Resize PVCs (storage class does not support expansion)
+
+Create a second instance set with the new storage size, wait for it to catch up, then remove the original instance set:
+
+1. Add `instance2` with larger PVC alongside `instance1`
+2. Once `instance2` replicas are caught up, remove `instance1` from the spec
+3. IVYO promotes an `instance2` pod to primary and removes the old PVCs
+
+---
+
+## Custom Configuration
+
+### IvorySQL / Patroni parameters
+
+All configuration changes propagate to every instance. Use `spec.patroni.dynamicConfiguration`:
+
+```yaml
+spec:
+  patroni:
+    dynamicConfiguration:
+      postgresql:
+        parameters:
+          max_parallel_workers: 2
+          max_worker_processes: 2
+          shared_buffers: 1GB
+          work_mem: 2MB
+```
+
+Verify after applying:
+
+```sql
+SHOW work_mem;
+--  work_mem
+-- ----------
+--  2MB
+```
+
+### Custom TLS
+
+<Steps>
+
+<Step>
+
+### Create the TLS secrets
+
+```bash
+kubectl create secret generic -n ivory-operator hippo-cluster.tls \
+  --from-file=ca.crt=ca.crt \
+  --from-file=tls.key=hippo.key \
+  --from-file=tls.crt=hippo.crt
+```
+
+Both `customTLSSecret` and `customReplicationTLSSecret` must share the same `ca.crt`.
+
+</Step>
+
+<Step>
+
+### Reference the secrets in the cluster spec
+
+```yaml
+spec:
+  customTLSSecret:
+    name: hippo-cluster.tls
+  customReplicationTLSSecret:
+    name: hippo-replication.tls
+```
+
+- `customTLSSecret` CN must match `<cluster-name>-primary` (e.g. `hippo-primary`)
+- `customReplicationTLSSecret` CN must match `_ivoryrepl`
+
+</Step>
+
+</Steps>
+
+### Separate WAL volume
+
+Store WAL files on dedicated storage for better I/O isolation:
+
+```yaml
+spec:
+  instances:
+    - name: instance1
+      walVolumeClaimSpec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+```
+
+### Database initialization SQL
+
+Run SQL once when the cluster initializes:
+
+```bash
+kubectl -n ivory-operator create configmap hippo-init-sql \
+  --from-file=init.sql=/path/to/init.sql
+```
+
+```yaml
+spec:
+  databaseInitSQL:
+    key: init.sql
+    name: hippo-init-sql
+```
+
+<Callout type="warn">
+Make your init SQL idempotent — in some cases IVYO may run it more than once. Use `\set ON_ERROR_STOP` at the top of the file to fail fast.
+</Callout>
+
+### Labels and annotations
+
+| Target | Field |
+|--------|-------|
+| All cluster objects | `spec.metadata.labels` / `spec.metadata.annotations` |
+| IvorySQL instances | `spec.instances.metadata.labels` / `.annotations` |
+| pgBackRest | `spec.backups.pgbackrest.metadata.labels` / `.annotations` |
+
+---
+
+## User and Database Management
+
+### Create a user and database
+
+```yaml
+spec:
+  users:
+    - name: rhino
+      databases:
+        - zoo
+      options: "CREATEDB CREATEROLE"
+```
+
+IVYO creates a Secret named `hippo-pguser-rhino` with connection credentials automatically.
+
+Common `options` values follow standard PostgreSQL role attributes: `SUPERUSER`, `NOSUPERUSER`, `CREATEDB`, `NOCREATEDB`, `CREATEROLE`, `LOGIN`, etc.
+
+### Access the default `ivory` superuser
+
+```yaml
+spec:
+  users:
+    - name: ivory
+```
+
+This creates `hippo-pguser-ivory` with the `ivory` account credentials.
+
+### Delete a user
+
+IVYO does **not** automatically delete users when removed from the spec. Run as superuser:
+
+```sql
+DROP OWNED BY rhino;
+DROP ROLE rhino;
+```
+
+### Delete a database
+
+```sql
+DROP DATABASE zoo;
+```
+
+---
+
+## Disaster Recovery and Cloning
+
+### Clone a cluster
+
+Create a new cluster pre-populated from an existing cluster's backup:
+
+```yaml
+apiVersion: ivory-operator.ivorysql.org/v1beta1
+kind: IvoryCluster
+metadata:
+  name: elephant
+spec:
+  dataSource:
+    ivoryCluster:
+      clusterName: hippo
+      repoName: repo1
+  image: ivorysql/ivorysql:latest
+  postgresVersion: 18
+  instances:
+    - dataVolumeClaimSpec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 1Gi
+  backups:
+    pgbackrest:
+      image: ivorysql/pgbackrest:latest
+      repos:
+        - name: repo1
+          volume:
+            volumeClaimSpec:
+              accessModes:
+                - "ReadWriteOnce"
+              resources:
+                requests:
+                  storage: 1Gi
+```
+
+### Point-in-time recovery (PITR) — new cluster
+
+Create a new cluster restored to a specific timestamp:
+
+```yaml
+spec:
+  dataSource:
+    ivoryCluster:
+      clusterName: hippo
+      repoName: repo1
+      options:
+        - --type=time
+        - --target="2024-06-09 14:15:11-04"
+```
+
+### In-place PITR
+
+Restore the existing cluster to a specific timestamp without creating a new one:
+
+```yaml
+spec:
+  backups:
+    pgbackrest:
+      restore:
+        enabled: true
+        repoName: repo1
+        options:
+          - --type=time
+          - --target="2024-06-09 14:15:11-04"
+```
+
+Trigger the restore:
+
+```bash
+kubectl annotate -n ivory-operator ivorycluster hippo --overwrite \
+  ivory-operator.ivorysql.org/pgbackrest-restore=id1
+```
+
+Disable restore mode when done:
+
+```yaml
+spec:
+  backups:
+    pgbackrest:
+      restore:
+        enabled: false
+```
+
+### Restore a single database
+
+```yaml
+spec:
+  backups:
+    pgbackrest:
+      restore:
+        enabled: true
+        repoName: repo1
+        options:
+          - --db-include=hippo
+```
+
+<Callout type="warn">
+Only the included database is accessible after restore. All other databases from the backup are inaccessible. Review the [pgBackRest documentation](https://pgbackrest.org/user-guide.html#restore/option-db-include) before using this option.
+</Callout>
+
+### Standby cluster
+
+A standby cluster receives continuous WAL from the primary and can be promoted to take over.
+
+<Tabs items={['Repo-based (S3)', 'Streaming replication', 'Streaming + external repo']}>
+<Tab>
+```yaml
+spec:
+  backups:
+    pgbackrest:
+      repos:
+        - name: repo1
+          s3:
+            bucket: "my-bucket"
+            endpoint: "s3.ca-central-1.amazonaws.com"
+            region: "ca-central-1"
+  standby:
+    enabled: true
+    repoName: repo1
+```
+</Tab>
+<Tab>
+```yaml
+spec:
+  customTLSSecret:
+    name: cluster-cert
+  customReplicationTLSSecret:
+    name: replication-cert
+  standby:
+    enabled: true
+    host: "192.0.2.2"
+    port: 5432
+```
+</Tab>
+<Tab>
+```yaml
+spec:
+  backups:
+    pgbackrest:
+      repos:
+        - name: repo1
+          s3:
+            bucket: "my-bucket"
+            endpoint: "s3.ca-central-1.amazonaws.com"
+            region: "ca-central-1"
+  customTLSSecret:
+    name: cluster-cert
+  customReplicationTLSSecret:
+    name: replication-cert
+  standby:
+    enabled: true
+    repoName: repo1
+    host: "192.0.2.2"
+    port: 5432
+```
+</Tab>
+</Tabs>
+
+**Promote a standby**: shut down the primary first to prevent split-brain, then disable standby mode:
+
+```yaml
+spec:
+  standby:
+    enabled: false
+```
+
+### Clone from S3 / GCS / Azure Blob Storage
+
+Restore from cloud-stored backups without an active source cluster:
+
+```yaml
+spec:
+  dataSource:
+    pgbackrest:
+      stanza: db
+      configuration:
+        - secret:
+            name: ivyo-s3-creds
+      global:
+        repo1-path: /pgbackrest/ivory-operator/hippo/repo1
+      repo:
+        name: repo1
+        s3:
+          bucket: "my-bucket"
+          endpoint: "s3.ca-central-1.amazonaws.com"
+          region: "ca-central-1"
+```
+
+---
+
+## Monitoring
+
+### Add the metrics exporter sidecar
+
+```yaml
+spec:
+  monitoring:
+    pgmonitor:
+      exporter:
+        image: ivorysql/postgres-exporter:latest
+```
+
+Apply with `kubectl apply -k kustomize/ivory`. IVYO adds the exporter to all Ivory Pods.
+
+### Configure TLS for the exporter
+
+```yaml
+spec:
+  monitoring:
+    pgmonitor:
+      exporter:
+        customTLSSecret:
+          name: hippo.tls
+```
+
+The secret must contain `tls.key` and `tls.crt`.
+
+### Install the monitoring stack (Prometheus + Grafana + Alertmanager)
+
+```bash
+kubectl apply -k kustomize/monitoring
+```
+
+The default stack connects to the exporter sidecar automatically. To uninstall:
+
+```bash
+kubectl delete -k kustomize/monitoring
+```
+
+Customize the stack by editing `kustomize/monitoring/`:
+
+| File | Purpose |
+|------|---------|
+| `prometheus-config.yaml` | Prometheus scrape config |
+| `grafana-datasources.yaml` | Grafana data source |
+| `alertmanager-config.yaml` | Alert routing rules |
+| `grafana-secret.yaml` | Grafana admin credentials |
+
+---
+
+## Connection Pooling (PgBouncer)
+
+### Add PgBouncer
+
+```yaml
+spec:
+  proxy:
+    pgBouncer:
+      image: ivorysql/pgbouncer:latest
+```
+
+IVYO creates a PgBouncer Deployment and adds pooler connection info to each user Secret.
+
+### Connect your application via the pooler
+
+The user Secret gains additional fields when a pooler is deployed:
+
+| Key | Value |
+|-----|-------|
+| `pgbouncer-host` | PgBouncer Service DNS |
+| `pgbouncer-port` | PgBouncer port |
+| `pgbouncer-uri` | PostgreSQL connection URI via pooler |
+| `pgbouncer-jdbc-uri` | JDBC URI via pooler |
+
+### PgBouncer configuration
+
+```yaml
+spec:
+  proxy:
+    pgBouncer:
+      replicas: 2
+      resources:
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      config:
+        global:
+          pool_mode: transaction
+          max_client_conn: "1000"
+          default_pool_size: "20"
+```
+
+### PgBouncer TLS
+
+```yaml
+spec:
+  proxy:
+    pgBouncer:
+      customTLSSecret:
+        name: hippo-pgbouncer.tls
+```
+
+The certificate CN must match `<cluster-name>-pgbouncer` (e.g. `hippo-pgbouncer`).
+
+---
+
+## Administrative Tasks
+
+### Rolling restart
+
+Trigger a rolling restart by updating any annotation:
+
+```bash
+kubectl patch ivorycluster/hippo -n ivory-operator --type merge \
+  --patch '{"spec":{"metadata":{"annotations":{"restarted":"'"$(date)"'"}}}}'
+```
+
+### Shutdown and resume
+
+```bash
+# Shutdown (scales all workloads to 0)
+kubectl patch ivorycluster/hippo -n ivory-operator --type merge \
+  --patch '{"spec":{"shutdown": true}}'
+
+# Resume
+kubectl patch ivorycluster/hippo -n ivory-operator --type merge \
+  --patch '{"spec":{"shutdown": false}}'
+```
+
+### Pause reconciliation
+
+```bash
+kubectl patch ivorycluster/hippo -n ivory-operator --type merge \
+  --patch '{"spec":{"paused": true}}'
+```
+
+While paused, IVYO stops applying spec changes. Resume by setting `paused: false`.
+
+### Rotate TLS certificates
+
+IVYO automatically rotates its managed certificates at 2/3 of their lifetime. To force an immediate rotation, delete the root CA secret:
+
+```bash
+kubectl delete secret ivyo-root-cacert
+```
+
+For custom certificates, update the values in the referenced Secret — IVYO detects the change without downtime.
+
+### Controlled switchover (change primary)
+
+<Steps>
+
+<Step>
+
+### Enable switchover in the spec
+
+```yaml
+spec:
+  patroni:
+    switchover:
+      enabled: true
+      targetInstance: hippo-instance1-wm5p   # optional: target a specific replica
+```
+
+Find available instances:
+
+```bash
+kubectl get pods -l ivory-operator.ivorysql.org/cluster=hippo \
+  -L ivory-operator.ivorysql.org/instance \
+  -L ivory-operator.ivorysql.org/role -n ivory-operator
+```
+
+</Step>
+
+<Step>
+
+### Trigger the switchover
+
+```bash
+kubectl annotate -n ivory-operator ivorycluster hippo \
+  ivory-operator.ivorysql.org/trigger-switchover="$(date)"
+```
+
+</Step>
+
+<Step>
+
+### Disable switchover when done
+
+```yaml
+spec:
+  patroni:
+    switchover:
+      enabled: false
+```
+
+</Step>
+
+</Steps>
+
+For **emergency failover** (cluster in unhealthy state), set `type: Failover` along with a `targetInstance`.
+
+---
+
+## Delete a Cluster
+
+```bash
+kubectl delete -k examples/kustomize/ivory
+```
+
+IVYO removes all cluster objects. PVC data is subject to your storage class [reclaim policy](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaiming).
+
+---
 
 ## Troubleshooting
 
-**Pods stuck in `Pending`** — Usually a PVC binding issue. Check that your storage class exists and has available PVs:
+**Pods stuck in `Pending`** — Usually a PVC binding issue. Check storage class availability:
 
 ```bash
 kubectl get pvc -n ivory-operator
 kubectl describe pvc <name> -n ivory-operator
+kubectl get sc   # verify allowVolumeExpansion and provisioner
 ```
 
 **On OpenShift** — Set `spec.openshift: true` in the `IvoryCluster` manifest.
 
-## Next steps
+**PVCs do not resize** — Your storage class may not support `allowVolumeExpansion`. Use the two-instance-set workaround described in [Resize a Cluster](#resize-a-cluster).
+
+**Configuration changes not applied** — Ensure the parameter name matches what IvorySQL expects. Check with `SHOW <parameter>` in `psql`.
+
+---
+
+## Next Steps
 
 <Cards>
-  <Card href="https://github.com/IvorySQL/ivory-operator" title="Operator GitHub" description="Full tutorial: HA, backups, scaling, custom TLS, and more." />
+  <Card href="https://github.com/IvorySQL/ivory-operator" title="Operator GitHub" description="Source code, issues, and full reference documentation." />
   <Card href="/docs/v5/cloud-service" title="IvorySQL Cloud" description="Managed IvorySQL with a graphical control plane built on the Operator." />
+  <Card href="/docs/v5/monitor-manage/monitoring" title="Monitor & Manage" description="Database activity monitoring, disk usage, and maintenance." />
 </Cards>

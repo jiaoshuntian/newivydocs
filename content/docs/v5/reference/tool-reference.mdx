@@ -740,6 +740,26 @@ vacuumdb [connection-option...] [option...] --all | -a
 
 ## Server Applications
 
+Server applications run directly on the host machine and require access to the data directory. Most require the database server to be stopped.
+
+For comprehensive CLI flag tables and usage examples, see [Server Tools Reference](/docs/v5/reference/server-tools).
+
+| Tool | Key use |
+|------|---------|
+| `initdb` | Create a new database cluster. |
+| `pg_ctl` | Start, stop, restart, reload, or check the server. |
+| `pg_upgrade` | Upgrade between major versions using existing data files. |
+| `pg_rewind` | Re-sync a failed primary after standby promotion. |
+| `pg_basebackup` | Take a physical base backup (also listed under Client Applications). |
+| `pg_checksums` | Enable/disable/verify page checksums on a stopped cluster. |
+| `pg_resetwal` | Emergency: reset WAL after corruption (data loss likely). |
+| `pg_waldump` | Read WAL records for debugging. |
+| `pg_controldata` | Show cluster control information. |
+| `pg_archivecleanup` | Remove old WAL archive files on standbys. |
+| `pg_test_fsync` | Benchmark `wal_sync_method` options. |
+| `pg_test_timing` | Measure system clock overhead. |
+| `postgres` | The server process (use `pg_ctl` for normal operation). |
+
 ### initdb
 
 Initialize a new database cluster by creating the data directory, catalog tables, and default databases.

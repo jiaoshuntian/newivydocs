@@ -1,0 +1,555 @@
+---
+title: Server Tools Reference
+description: Command-line reference for IvorySQL server administration tools — initdb, pg_ctl, pg_upgrade, pg_rewind, and more.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+
+# Server Tools Reference
+
+Server applications are run by database administrators directly on the server host. Unlike client tools, most of these require direct access to the data directory and must run as the database superuser or the OS user that owns the data files.
+
+<Callout type="warn">
+Most server tools require the database server to be stopped. Always verify the server is not running before using tools that modify cluster files.
+</Callout>
+
+## initdb
+
+Create a new IvorySQL database cluster — the initial data directory, catalog tables, and default databases (`postgres`, `template0`, `template1`).
+
+**Synopsis**
+
+```bash
+initdb [option...] [ --pgdata | -D ] directory
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory` | Data directory to create (required, or set `PGDATA`). |
+| `-A authmethod` | Default auth method in `pg_hba.conf`. Avoid `trust` in production. |
+| `-E encoding` | Default encoding for template databases. |
+| `-k` `--data-checksums` | Enable page checksums to detect silent I/O corruption. |
+| `--locale=locale` | Set cluster-wide locale. |
+| `--locale-provider={libc\|icu}` | Locale provider (default: `libc`). |
+| `--icu-locale=locale` | ICU locale ID when using ICU provider. |
+| `-U username` | Database superuser name (default: current OS user). |
+| `-W` | Prompt for superuser password. |
+| `--pwfile=filename` | Read superuser password from file. |
+| `-X directory` | Store WAL files in a separate directory. |
+| `--wal-segsize=MB` | WAL segment file size in megabytes (power of 2, default: 16). |
+| `-N` `--no-sync` | Skip waiting for disk sync (testing only). |
+
+**Example**
+
+```bash
+initdb -D /var/lib/ivorysql/data --locale=en_US.UTF-8 --data-checksums
+```
+
+**Environment**: `PGDATA`, `PG_COLOR`, `TZ`
+
+---
+
+## pg_ctl
+
+Initialize, start, stop, restart, reload, or check status of a database server. The primary tool for managing the `postgres` process.
+
+**Synopsis**
+
+```bash
+pg_ctl init[db]  [-D datadir] [-s] [-o initdb-options]
+pg_ctl start     [-D datadir] [-l filename] [-o options]
+pg_ctl stop      [-D datadir] [-m smart|fast|immediate]
+pg_ctl restart   [-D datadir] [-m smart|fast|immediate] [-o options]
+pg_ctl reload    [-D datadir]
+pg_ctl status    [-D datadir]
+pg_ctl promote   [-D datadir]
+pg_ctl logrotate [-D datadir]
+pg_ctl kill      signal_name process_id
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-D datadir` | Data directory (or set `PGDATA`). |
+| `-l filename` | Append server log output to file. |
+| `-m mode` | Shutdown mode: `smart` (wait for clients), `fast` (disconnect immediately), `immediate` (crash-style, no checkpoint). Default: `fast`. |
+| `-o options` | Options to pass directly to the `postgres` process. |
+| `-w` `--wait` | Wait for operation to complete (default for start/stop/restart). |
+| `-W` `--no-wait` | Return immediately without waiting. |
+| `-t seconds` | Timeout when waiting (default: 60s, or `PGCTLTIMEOUT`). |
+| `-s` `--silent` | Print only errors. |
+| `-c` `--core-files` | Allow server crashes to produce core files. |
+
+**Examples**
+
+```bash
+# Start server and wait for readiness
+pg_ctl start -D /var/lib/ivorysql/data -l /var/log/ivorysql.log
+
+# Start with a custom port, fsync disabled
+pg_ctl -o "-F -p 5433" start
+
+# Graceful shutdown
+pg_ctl stop -D /var/lib/ivorysql/data
+
+# Fast shutdown (disconnect clients)
+pg_ctl stop -m fast
+
+# Reload configuration (postgresql.conf, pg_hba.conf)
+pg_ctl reload
+
+# Promote standby to primary
+pg_ctl promote -D /var/lib/standby
+```
+
+**Windows service management**
+
+```cmd
+pg_ctl register -N IvorySQL -D C:\ivorysql\data -S auto
+pg_ctl unregister -N IvorySQL
+```
+
+---
+
+## initdb (IvorySQL case-conversion mode)
+
+IvorySQL extends `initdb` with a `-C` option for the Oracle-compatible identifier case-conversion mode:
+
+```bash
+# Set case-conversion mode at cluster initialization
+initdb -C interchange -D /var/lib/ivorysql/data
+```
+
+| Value | Numeric alias | Behavior |
+|-------|--------------|---------|
+| `normal` | `0` | Double-quoted identifiers keep their exact case. |
+| `interchange` | `1` | All-uppercase → lowercase; all-lowercase → uppercase; mixed → unchanged. |
+| `lowercase` | `2` | All-uppercase → lowercase; mixed → unchanged. |
+
+The mode is stored in `global/pg_control` and cannot be changed after initialization.
+
+---
+
+## pg_checksums
+
+Enable, disable, or verify page-level checksums in a stopped cluster. Checksums help detect silent storage corruption.
+
+**Synopsis**
+
+```bash
+pg_checksums [option...] [[ -D | --pgdata ] datadir]
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory` | Data directory. |
+| `-c` `--check` | Verify checksums (default if no mode specified). |
+| `-e` `--enable` | Enable checksums (rewrites all relation files). |
+| `-d` `--disable` | Disable checksums. |
+| `-f filenode` | Check only the relation with the given filenode. |
+| `-P` `--progress` | Show progress during enable/check. |
+| `-v` `--verbose` | List all checked files. |
+| `-N` `--no-sync` | Skip waiting for disk sync (testing only). |
+
+<Callout type="warn">
+The cluster must be stopped during enable/disable operations. Enabling checksums on a large cluster can take significant time and rewrites all data files.
+</Callout>
+
+**Example**
+
+```bash
+# Check checksums on a stopped cluster
+pg_checksums --check -D /var/lib/ivorysql/data
+
+# Enable checksums
+pg_checksums --enable -P -D /var/lib/ivorysql/data
+```
+
+---
+
+## pg_controldata
+
+Display the control file (`global/pg_control`) contents — cluster state, checkpoint information, database system identifier, and WAL settings. Read-only.
+
+**Synopsis**
+
+```bash
+pg_controldata [[ -D | --pgdata ] datadir]
+```
+
+**Example**
+
+```bash
+pg_controldata -D /var/lib/ivorysql/data
+```
+
+Output includes: `Database cluster state`, `Latest checkpoint location`, `Database system identifier`, `Database block size`, `Bytes per WAL segment`, `Maximum length of identifiers`, `Data page checksum version`.
+
+**Environment**: `PGDATA`, `PG_COLOR`
+
+---
+
+## pg_resetwal
+
+Reset the WAL and other control information in a cluster that can no longer be started because of corrupted WAL or control data. **Last-resort recovery tool — data loss is likely.**
+
+**Synopsis**
+
+```bash
+pg_resetwal [ -f | --force ] [ -n | --dry-run ] [option...] [ -D | --pgdata ] datadir
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-f` `--force` | Proceed even if `pg_control` data is not valid. |
+| `-n` `--dry-run` | Show what would be changed without modifying anything. |
+| `-x xid` | Manually set the next transaction ID. |
+| `-u xid` | Manually set the oldest unfrozen transaction ID. |
+| `-l walfile` | Set the next WAL segment file name. |
+| `--wal-segsize=MB` | Change the WAL segment size. |
+
+<Callout type="error">
+Only use `pg_resetwal` as a last resort after all recovery options have been exhausted. The cluster will likely be in an inconsistent state after use. Make a file-system backup first.
+</Callout>
+
+**Environment**: `PG_COLOR`
+
+---
+
+## pg_rewind
+
+Re-synchronize a server data directory to match another data directory that was forked from it — typically used to resync a failed primary after promotion of a standby.
+
+**Synopsis**
+
+```bash
+pg_rewind [option...] { -D | --target-pgdata } directory \
+    { --source-pgdata=directory | --source-server=connstr }
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-D directory` `--target-pgdata=directory` | Target (old primary) data directory. Must be cleanly shut down. |
+| `--source-pgdata=directory` | Source from filesystem (source server must be stopped). |
+| `--source-server=connstr` | Source from live running server via libpq connection. |
+| `-R` `--write-recovery-conf` | Write `standby.signal` and connection settings to the target. |
+| `-n` `--dry-run` | Simulate without modifying target. |
+| `-P` `--progress` | Show progress during data copy. |
+| `-c` `--restore-target-wal` | Use `restore_command` to fetch archived WAL. |
+| `--no-ensure-shutdown` | Skip automatic crash recovery of target (advanced). |
+
+**Minimal privilege role (online source)**
+
+```sql
+CREATE USER rewind_user LOGIN;
+GRANT EXECUTE ON function pg_catalog.pg_ls_dir(text, boolean, boolean) TO rewind_user;
+GRANT EXECUTE ON function pg_catalog.pg_stat_file(text, boolean) TO rewind_user;
+GRANT EXECUTE ON function pg_catalog.pg_read_binary_file(text) TO rewind_user;
+GRANT EXECUTE ON function pg_catalog.pg_read_binary_file(text, bigint, bigint, boolean) TO rewind_user;
+```
+
+**How it works**
+
+1. Scans the target's WAL for all changed data blocks since the fork point
+2. Copies those blocks from the source to the target
+3. Copies all other changed files (WAL segments, `pg_xact`, config files)
+4. Creates a `backup_label` to begin WAL replay at the appropriate checkpoint
+5. The target replays WAL on startup to reach a consistent state
+
+**Example**
+
+```bash
+# Rewind using a live primary as source
+pg_rewind -D /var/lib/standby --source-server="host=primary user=rewind_user dbname=postgres" -P
+```
+
+---
+
+## pg_archivecleanup
+
+Remove WAL archive files that are no longer needed by a standby server. Typically run via `archive_cleanup_command` in `postgresql.conf`.
+
+**Synopsis**
+
+```bash
+pg_archivecleanup [option...] archivelocation oldestkeptwalfile
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-d` | Debug: print verbose output to stderr. |
+| `-n` | Dry run: print files that would be removed without deleting. |
+| `-x extension` | Strip this extension before deciding what to delete (e.g. `-x .gz`). |
+
+**Example** (in `postgresql.conf`)
+
+```
+archive_cleanup_command = 'pg_archivecleanup /mnt/archive %r'
+```
+
+The `%r` is replaced with the oldest WAL file name still needed by the standby.
+
+---
+
+## pg_test_fsync
+
+Measure the speed of different WAL sync methods (`wal_sync_method`) on your storage. Run once during initial setup to choose the optimal setting.
+
+**Synopsis**
+
+```bash
+pg_test_fsync [option...]
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-f filename` | File to use for testing (should be on the same filesystem as `pg_wal`). |
+| `-s seconds` | Seconds per test (default: 5). More seconds = more accurate. |
+
+**Example**
+
+```bash
+pg_test_fsync -f /var/lib/ivorysql/data/pg_wal/testfile
+```
+
+The output shows operations/second for each sync method. Use the fastest method as your `wal_sync_method` in `postgresql.conf`.
+
+---
+
+## pg_test_timing
+
+Measure the overhead of the system clock — how long it takes to call `gettimeofday()`. Used to verify whether timing is accurate enough for query profiling.
+
+**Synopsis**
+
+```bash
+pg_test_timing [option...]
+```
+
+**Key option**
+
+| Option | Description |
+|--------|-------------|
+| `-d duration` | Duration of test in seconds (default: 3). |
+
+**Example**
+
+```bash
+pg_test_timing
+# Per timing duration including loop overhead: 97.75 ns
+# Histogram of timing durations: ...
+```
+
+If overhead exceeds a few hundred nanoseconds, consider switching the OS clock source from `acpi_pm` to `tsc` or `hpet`.
+
+---
+
+## pg_upgrade
+
+Upgrade a database cluster to a new major version of IvorySQL without a dump-and-restore cycle. Uses the binary data directory directly.
+
+**Synopsis**
+
+```bash
+pg_upgrade -b oldbindir [-B newbindir] -d oldconfigdir -D newconfigdir [option...]
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-b bindir` `--old-bindir` | Old IvorySQL binary directory. |
+| `-B bindir` `--new-bindir` | New binary directory (default: same directory as pg_upgrade). |
+| `-d configdir` `--old-datadir` | Old data directory. |
+| `-D configdir` `--new-datadir` | New data directory. |
+| `-c` `--check` | Check only — no changes made. Works on a running old cluster. |
+| `-k` `--link` | Use hard links instead of copying files (faster, old cluster becomes unusable). |
+| `--clone` | Use file cloning/reflinks (fast + old cluster stays usable; requires Btrfs, XFS, or APFS). |
+| `-j njobs` `--jobs` | Number of parallel processes for file copying and schema restore. |
+| `-o options` | Options to pass to the old `postgres`. |
+| `-O options` | Options to pass to the new `postgres`. |
+| `-U username` | Install user name. |
+| `-v` `--verbose` | Enable verbose logging. |
+| `-r` `--retain` | Keep SQL and log files even after successful completion. |
+| `-N` `--no-sync` | Skip waiting for disk sync (testing only). |
+
+**Upgrade procedure**
+
+<Tabs>
+<Tab label="Copy mode (safest)" value="copy">
+```bash
+# 1. Check compatibility first (old server can stay running)
+pg_upgrade -b /old/bin -B /new/bin -d /old/data -D /new/data --check
+
+# 2. Stop old server
+pg_ctl stop -D /old/data
+
+# 3. Run upgrade
+pg_upgrade -b /old/bin -B /new/bin -d /old/data -D /new/data -j 4
+
+# 4. Start new server
+pg_ctl start -D /new/data
+
+# 5. Regenerate optimizer statistics
+./analyze_new_cluster.sh
+
+# 6. Delete old cluster (optional)
+./delete_old_cluster.sh
+```
+</Tab>
+<Tab label="Link mode (fastest)" value="link">
+```bash
+# Use --link to avoid copying — much faster on large clusters
+# WARNING: old cluster becomes unusable after upgrade starts
+
+pg_upgrade -b /old/bin -B /new/bin -d /old/data -D /new/data --link -j 4
+```
+</Tab>
+<Tab label="Clone mode (reflinks)" value="clone">
+```bash
+# --clone: near-instant, old cluster stays usable
+# Requires: Linux Btrfs/XFS kernel 4.5+, or macOS APFS
+
+pg_upgrade -b /old/bin -B /new/bin -d /old/data -D /new/data --clone
+```
+</Tab>
+</Tabs>
+
+<Callout type="info">
+After upgrade, run `vacuumdb --all --analyze-in-stages` to regenerate optimizer statistics, since they are not transferred by `pg_upgrade`.
+</Callout>
+
+**Revert**: If `--link` was not used, the old cluster is untouched and can be restarted. If `--link` was used and the new cluster has not been started, remove the `.old` suffix from `$PGDATA/global/pg_control` to reuse the old cluster.
+
+---
+
+## pg_waldump
+
+Display a human-readable rendering of WAL (write-ahead log) segment files. Useful for debugging and forensic analysis.
+
+**Synopsis**
+
+```bash
+pg_waldump [option...] [startseg [endseg]]
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `startseg` | Start reading from this WAL segment file (also sets timeline and path). |
+| `endseg` | Stop after this WAL segment file. |
+| `-s start` `--start` | Starting WAL location (LSN). |
+| `-e end` `--end` | Ending WAL location. |
+| `-n limit` `--limit` | Show only this many records. |
+| `-p path` `--path` | Directory to search for WAL files (default: current dir, then `pg_wal/`). |
+| `-r rmgr` `--rmgr` | Show only records from this resource manager (e.g. `Heap`, `Btree`). Use `list` to list all. |
+| `-x xid` `--xid` | Show only records for this transaction ID. |
+| `-R tblspc/db/rel` | Show only records modifying this relation. |
+| `-b` `--bkp-details` | Show detailed info about backup blocks. |
+| `-B block` `--block` | Show only records modifying this block (use with `-R`). |
+| `-f` `--follow` | Keep polling for new WAL after reaching the end. |
+| `-F fork` | Filter by fork: `main`, `fsm`, `vm`, `init`. |
+| `-w` `--fullpage` | Show only full-page image records. |
+| `-q` `--quiet` | Suppress output; non-zero exit if any record fails to parse. |
+| `-z` `--stats` | Display summary statistics instead of individual records. |
+
+**Examples**
+
+```bash
+# Dump all records from a specific segment
+pg_waldump -p /var/lib/ivorysql/data/pg_wal 000000010000000100000001
+
+# Show stats summary
+pg_waldump --stats -p /var/lib/ivorysql/data/pg_wal 000000010000000100000001
+
+# Filter for a specific transaction
+pg_waldump --xid=12345 -p /var/lib/ivorysql/data/pg_wal
+
+# Follow live WAL (like tail -f)
+pg_waldump --follow -p /var/lib/ivorysql/data/pg_wal
+```
+
+<Callout type="warn">
+`pg_waldump` can give wrong results when the server is running. For debugging, stop the server first or use an offline copy of `pg_wal`.
+</Callout>
+
+---
+
+## postgres
+
+The IvorySQL database server process. Under normal operation, use `pg_ctl` instead of invoking `postgres` directly. Direct invocation is useful for debugging or single-user recovery mode.
+
+**Synopsis**
+
+```bash
+postgres [option...]
+postgres --single -D datadir [option...] database
+```
+
+**Key options**
+
+| Option | Description |
+|--------|-------------|
+| `-D datadir` | Data directory (or set `PGDATA`). |
+| `-p port` | Listen port (default: `PGPORT` or 5432). |
+| `-h hostname` | Listen address for TCP/IP (use `*` for all interfaces). |
+| `-k directory` | Unix-domain socket directory. |
+| `-N max-connections` | Maximum client connections. |
+| `-B nbuffers` | Number of shared buffers. |
+| `-c name=value` | Set a run-time configuration parameter (can repeat). |
+| `-C name` | Print the value of a configuration parameter and exit. |
+| `-d level` | Debug level (1–5). |
+| `-e` | European date style (DMY). |
+| `-F` | Disable fsync (data loss risk). |
+| `-i` | Allow TCP/IP connections (deprecated; use `listen_addresses` instead). |
+| `-l` | Enable SSL. |
+| `-s` | Print timing statistics after each command. |
+
+**Background startup**
+
+```bash
+nohup postgres -D /var/lib/ivorysql/data >logfile 2>&1 </dev/null &
+```
+
+**Single-user mode (emergency recovery)**
+
+Single-user mode runs the database engine without any network access — used for catalog repairs that require exclusive access.
+
+```bash
+postgres --single -D /var/lib/ivorysql/data postgres
+```
+
+In single-user mode:
+- Newline terminates a command (or use `-j` for `semicolon + two newlines`)
+- No background processes (no autovacuum, no checkpointing)
+- Type `EOF` (Ctrl+D) to exit
+
+**Signals**
+
+| Signal | Effect |
+|--------|--------|
+| `SIGTERM` | Smart shutdown: wait for active clients to finish |
+| `SIGINT` | Fast shutdown: disconnect clients immediately |
+| `SIGQUIT` | Immediate shutdown (crash-style, no checkpoint) |
+| `SIGHUP` | Reload configuration files |
+
+<Callout type="warn">
+Never use `SIGKILL` on the main `postgres` process — it prevents cleanup of shared memory and semaphores, which can block future starts.
+</Callout>
+
+**Environment**: `PGDATA`, `PGPORT`, `PGCLIENTENCODING`, `PGOPTIONS`

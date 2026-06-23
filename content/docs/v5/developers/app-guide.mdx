@@ -1,0 +1,487 @@
+---
+title: Application Developer Guide
+description: How to build applications with IvorySQL — create databases, model data, insert and query rows, manage transactions, and use Oracle-compatible SQL features.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+
+# Application Developer Guide
+
+IvorySQL extends PostgreSQL with Oracle-compatible SQL syntax, procedural language support (PL/iSQL), and additional built-in functions. This guide covers the core developer tasks: modeling data, reading and writing rows, managing transactions, and using IvorySQL-specific features.
+
+---
+
+## Create a Database
+
+Use `createdb` from the shell, or `CREATE DATABASE` from SQL:
+
+```bash
+createdb mydb
+```
+
+```sql
+CREATE DATABASE mydb;
+```
+
+To remove a database permanently:
+
+```bash
+dropdb mydb
+```
+
+<Callout type="warn">
+`dropdb` physically removes all files and cannot be undone.
+</Callout>
+
+---
+
+## Model Data
+
+### Create a table
+
+```sql
+CREATE TABLE products (
+    product_no integer,
+    name       text,
+    price      numeric
+);
+```
+
+IvorySQL supports all standard SQL types (`int`, `smallint`, `real`, `double precision`, `char(N)`, `varchar(N)`, `date`, `time`, `timestamp`, `interval`) as well as Oracle-compatible types like `VARCHAR2` and `NUMBER`.
+
+### Use Oracle-compatible VARCHAR2
+
+```sql
+CREATE TABLE customers (
+    id      integer,
+    name    varchar2(100),
+    email   varchar2(255)
+);
+```
+
+`VARCHAR2(N)` stores variable-length strings up to N bytes or characters depending on `NLS_LENGTH_SEMANTICS`:
+
+```sql
+-- Store by character count (default for Oracle compatibility)
+SET NLS_LENGTH_SEMANTICS TO CHAR;
+
+-- Store by byte count
+SET NLS_LENGTH_SEMANTICS TO BYTE;
+
+SHOW NLS_LENGTH_SEMANTICS;
+```
+
+### Drop a table
+
+```sql
+DROP TABLE products;
+```
+
+---
+
+## Insert Data
+
+### Insert a single row
+
+```sql
+INSERT INTO products (product_no, name, price) VALUES (1, 'Cheese', 9.99);
+```
+
+Column order in the list can differ from the table definition. If you omit columns they receive their default values:
+
+```sql
+INSERT INTO products (product_no, name) VALUES (2, 'Bread');
+```
+
+### Insert multiple rows
+
+```sql
+INSERT INTO products (product_no, name, price) VALUES
+    (1, 'Cheese', 9.99),
+    (2, 'Bread',  1.99),
+    (3, 'Milk',   2.99);
+```
+
+### Insert from a query
+
+```sql
+INSERT INTO products (product_no, name, price)
+    SELECT product_no, name, price
+    FROM staging_products
+    WHERE approved = true;
+```
+
+<Callout type="tip">
+For bulk loads, use `COPY` instead of `INSERT` — it is significantly faster for large datasets.
+</Callout>
+
+---
+
+## Update and Delete
+
+### Update rows
+
+```sql
+UPDATE products
+SET price = price * 1.10
+WHERE price < 5.00;
+```
+
+### Upsert (INSERT … ON CONFLICT)
+
+```sql
+INSERT INTO products (product_no, name, price)
+VALUES (1, 'Cheese', 10.99)
+ON CONFLICT (product_no) DO UPDATE
+    SET price = EXCLUDED.price;
+```
+
+### Delete rows
+
+```sql
+DELETE FROM products WHERE price > 100;
+```
+
+---
+
+## Query Data
+
+### Basic SELECT
+
+```sql
+SELECT product_no, name, price
+FROM products
+WHERE price < 5.00
+ORDER BY name;
+```
+
+### Aggregate functions
+
+```sql
+SELECT
+    count(*)                     AS total,
+    avg(price)                   AS avg_price,
+    min(price)                   AS min_price,
+    max(price)                   AS max_price,
+    sum(price)                   AS total_value
+FROM products;
+```
+
+Filter rows before aggregation with `WHERE`; filter aggregated groups with `HAVING`:
+
+```sql
+SELECT category, count(*) AS n
+FROM products
+GROUP BY category
+HAVING count(*) > 5
+ORDER BY n DESC;
+```
+
+### Combine queries with UNION / INTERSECT / EXCEPT
+
+```sql
+-- All products from either table, no duplicates
+SELECT product_no, name FROM current_products
+UNION
+SELECT product_no, name FROM archived_products;
+
+-- Only products that appear in both tables
+SELECT product_no FROM current_products
+INTERSECT
+SELECT product_no FROM archived_products;
+
+-- Products in current but not archived
+SELECT product_no FROM current_products
+EXCEPT
+SELECT product_no FROM archived_products;
+```
+
+Use `UNION ALL` / `INTERSECT ALL` / `EXCEPT ALL` to keep duplicates.
+
+### Window functions
+
+```sql
+SELECT
+    name,
+    price,
+    rank() OVER (ORDER BY price DESC)             AS price_rank,
+    avg(price) OVER (PARTITION BY category)       AS category_avg
+FROM products;
+```
+
+### GREATEST and LEAST
+
+```sql
+SELECT greatest(100, 200, 150);   -- 200
+SELECT least(100, 200, 150);      -- 100
+
+-- NULL propagates: returns NULL if any argument is NULL
+SELECT greatest('HARRY', 'HARRIOT', NULL);   -- (null)
+```
+
+---
+
+## Hierarchical Queries (CONNECT BY)
+
+IvorySQL supports Oracle-style `CONNECT BY` for querying tree-structured data:
+
+```sql
+SELECT level, employee_id, manager_id, name
+FROM employees
+START WITH manager_id IS NULL
+CONNECT BY PRIOR employee_id = manager_id;
+```
+
+Additional pseudo-columns and functions:
+
+| Syntax | Description |
+|--------|-------------|
+| `LEVEL` | Depth of the current row (root = 1) |
+| `CONNECT_BY_ROOT expr` | Value of `expr` at the root row |
+| `SYS_CONNECT_BY_PATH(col, chr)` | Path from root to current row, separated by `chr` |
+
+```sql
+SELECT
+    LEVEL,
+    SYS_CONNECT_BY_PATH(name, '/') AS path,
+    CONNECT_BY_ROOT name            AS root_name
+FROM employees
+START WITH manager_id IS NULL
+CONNECT BY NOCYCLE PRIOR employee_id = manager_id;
+```
+
+<Callout type="info">
+`NOCYCLE` is accepted syntactically for Oracle compatibility. Cycle detection is on the roadmap.
+</Callout>
+
+---
+
+## Transactions
+
+IvorySQL runs in autocommit mode by default. Wrap multiple statements in a transaction block for atomicity.
+
+### Basic transaction
+
+```sql
+BEGIN;
+    UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+    UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+```
+
+To cancel all changes in the block:
+
+```sql
+ROLLBACK;
+```
+
+`END` is an IvorySQL alias for `COMMIT`:
+
+```sql
+BEGIN;
+    -- ...
+END;
+```
+
+### Savepoints
+
+Use savepoints to roll back part of a transaction without aborting the whole block:
+
+```sql
+BEGIN;
+    INSERT INTO orders (id, total) VALUES (1, 99.99);
+    SAVEPOINT before_item;
+    INSERT INTO order_items (order_id, sku) VALUES (1, 'INVALID');
+    ROLLBACK TO SAVEPOINT before_item;   -- undo the bad item insert
+    INSERT INTO order_items (order_id, sku) VALUES (1, 'SKU-001');
+COMMIT;
+```
+
+Release a savepoint when it is no longer needed:
+
+```sql
+RELEASE SAVEPOINT before_item;
+```
+
+### Isolation levels
+
+<Tabs items={['READ COMMITTED (default)', 'REPEATABLE READ', 'SERIALIZABLE']}>
+<Tab>
+```sql
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+-- Each statement sees rows committed before that statement began.
+COMMIT;
+```
+</Tab>
+<Tab>
+```sql
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+-- All statements see rows committed before the first statement in this transaction.
+COMMIT;
+```
+</Tab>
+<Tab>
+```sql
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+-- Strictest. Transactions run as if they were fully sequential.
+-- May raise serialization_failure — retry on that error.
+COMMIT;
+```
+</Tab>
+</Tabs>
+
+Set the session default:
+
+```sql
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+```
+
+### Deferred constraint checking
+
+```sql
+BEGIN;
+SET CONSTRAINTS ALL DEFERRED;
+    -- Insert rows that temporarily violate FK constraints
+    -- Constraints checked at COMMIT, not per-statement
+COMMIT;
+```
+
+---
+
+## PL/iSQL Procedural Code
+
+PL/iSQL is IvorySQL's procedural language — a superset of PL/pgSQL with Oracle PL/SQL compatibility.
+
+### Block structure
+
+```sql
+[DECLARE
+    -- variable declarations]
+BEGIN
+    -- statements
+[EXCEPTION
+    WHEN <condition> THEN
+        -- error handling]
+END;
+```
+
+### Function
+
+```sql
+CREATE OR REPLACE FUNCTION get_discount(price numeric)
+RETURN numeric AS
+BEGIN
+    IF price > 100 THEN
+        RETURN price * 0.10;
+    ELSE
+        RETURN 0;
+    END IF;
+END;
+/
+```
+
+### Procedure
+
+```sql
+CREATE OR REPLACE PROCEDURE archive_orders(cutoff_date date)
+IS
+BEGIN
+    INSERT INTO orders_archive
+        SELECT * FROM orders WHERE created_at < cutoff_date;
+    DELETE FROM orders WHERE created_at < cutoff_date;
+END;
+/
+```
+
+### Exception handling
+
+```sql
+CREATE OR REPLACE FUNCTION safe_divide(a numeric, b numeric)
+RETURN numeric AS
+BEGIN
+    RETURN a / b;
+EXCEPTION
+    WHEN division_by_zero THEN
+        RETURN NULL;
+END;
+/
+```
+
+### Package
+
+Packages group related procedures and functions under a single namespace.
+
+```sql
+-- Package header (public interface)
+CREATE OR REPLACE PACKAGE order_utils AS
+    FUNCTION total_for_customer(cust_id integer) RETURN numeric;
+    PROCEDURE cancel_order(order_id integer);
+END order_utils;
+/
+
+-- Package body (implementation)
+CREATE OR REPLACE PACKAGE BODY order_utils AS
+    FUNCTION total_for_customer(cust_id integer) RETURN numeric IS
+        v_total numeric;
+    BEGIN
+        SELECT sum(total) INTO v_total
+        FROM orders WHERE customer_id = cust_id;
+        RETURN coalesce(v_total, 0);
+    END;
+
+    PROCEDURE cancel_order(order_id integer) IS
+    BEGIN
+        UPDATE orders SET status = 'cancelled' WHERE id = order_id;
+    END;
+END order_utils;
+/
+```
+
+Call package members using dot notation:
+
+```sql
+SELECT order_utils.total_for_customer(42);
+CALL order_utils.cancel_order(1001);
+```
+
+---
+
+## Global Unique Index (Partitioned Tables)
+
+IvorySQL adds `GLOBAL` unique indexes that enforce uniqueness across all partitions — something standard PostgreSQL unique indexes cannot do.
+
+```sql
+CREATE TABLE orders (
+    id         bigint,
+    region     text,
+    order_date date
+) PARTITION BY RANGE (order_date);
+
+CREATE TABLE orders_2024 PARTITION OF orders
+    FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+CREATE TABLE orders_2025 PARTITION OF orders
+    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+
+-- Enforce global uniqueness on `id` across all partitions
+CREATE UNIQUE INDEX orders_id_gidx ON orders (id) GLOBAL;
+```
+
+Inserting a duplicate `id` into any partition raises an error regardless of which partition the conflict is in:
+
+```sql
+INSERT INTO orders VALUES (1001, 'APAC', '2024-03-15');
+INSERT INTO orders VALUES (1001, 'EMEA', '2025-06-20');
+-- ERROR: duplicate key value violates unique constraint
+```
+
+Global indexes also enforce uniqueness when attaching an existing table as a new partition.
+
+---
+
+## Next Steps
+
+- [Oracle Compatibility Overview](/docs/v5/oracle-compatibility) — full reference for compatible data types, functions, and syntax
+- [PL/iSQL Functions & Stored Procedures](/docs/v5/oracle-compatibility/pl-isql) — deeper PL/iSQL syntax reference
+- [Migration Guide](/docs/v5/migration) — migrating an Oracle application to IvorySQL

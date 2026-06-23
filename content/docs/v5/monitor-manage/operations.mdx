@@ -630,3 +630,204 @@ Several configuration parameters influence planner behavior:
 <Callout type="warn">
 Disabling plan types (e.g., `enable_seqscan = off`) should only be used as a temporary workaround. The planner's cost parameters provide a more robust approach to influencing plan selection.
 </Callout>
+
+---
+
+## Search Data
+
+IvorySQL supports the full PostgreSQL SQL surface for querying data — `SELECT`, `WHERE`, `JOIN`, window functions, CTEs, full-text search, and more. The sections below highlight the most common search patterns.
+
+### Full-text search
+
+IvorySQL inherits PostgreSQL's built-in full-text search engine. It converts text into `tsvector` (a sorted list of normalized lexemes) and queries against it using `tsquery`.
+
+```sql
+-- Create a table with a full-text search index
+CREATE TABLE articles (
+  id     SERIAL PRIMARY KEY,
+  title  TEXT,
+  body   TEXT,
+  tsv    TSVECTOR GENERATED ALWAYS AS (
+           to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+         ) STORED
+);
+
+CREATE INDEX articles_tsv_idx ON articles USING GIN (tsv);
+```
+
+Query it:
+
+```sql
+SELECT id, title
+FROM articles
+WHERE tsv @@ to_tsquery('english', 'IvorySQL & database');
+```
+
+Rank results by relevance:
+
+```sql
+SELECT id, title,
+       ts_rank(tsv, to_tsquery('english', 'IvorySQL & database')) AS rank
+FROM articles
+WHERE tsv @@ to_tsquery('english', 'IvorySQL & database')
+ORDER BY rank DESC;
+```
+
+### Pattern matching
+
+```sql
+-- Case-insensitive LIKE (Oracle-compatible mode)
+SELECT * FROM products WHERE name ILIKE '%oracle%';
+
+-- Regular expression match
+SELECT * FROM logs WHERE message ~ 'ERROR|FATAL';
+```
+
+### Pagination
+
+```sql
+-- Offset-based (simple, less efficient on large offsets)
+SELECT * FROM orders ORDER BY created_at DESC LIMIT 20 OFFSET 40;
+
+-- Keyset pagination (efficient at any depth)
+SELECT * FROM orders
+WHERE created_at < '2024-06-01'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+For the full query reference see the [PostgreSQL queries documentation](https://www.postgresql.org/docs/current/queries.html).
+
+---
+
+## Use Foreign Data Wrappers (FDW)
+
+IvorySQL implements the SQL/MED specification, allowing you to query external data sources — other databases, flat files, REST APIs — using ordinary SQL. The external data appears as normal tables inside IvorySQL.
+
+### Key concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Foreign data wrapper (FDW)** | A plugin that handles communication with the external data source |
+| **Foreign server** | A named connection to a specific external system |
+| **User mapping** | Per-role credentials used when connecting to the foreign server |
+| **Foreign table** | A table definition that maps to data in the external system |
+
+### Connect to another PostgreSQL / IvorySQL database (`postgres_fdw`)
+
+<Steps>
+
+<Step>
+
+#### Install the extension
+
+```sql
+CREATE EXTENSION postgres_fdw;
+```
+
+</Step>
+
+<Step>
+
+#### Create a foreign server
+
+```sql
+CREATE SERVER remote_db
+  FOREIGN DATA WRAPPER postgres_fdw
+  OPTIONS (host 'db2.example.com', port '5432', dbname 'sales');
+```
+
+</Step>
+
+<Step>
+
+#### Map a local role to a remote user
+
+```sql
+CREATE USER MAPPING FOR current_user
+  SERVER remote_db
+  OPTIONS (user 'remote_user', password 's3cr3t');
+```
+
+</Step>
+
+<Step>
+
+#### Create a foreign table
+
+```sql
+CREATE FOREIGN TABLE remote_orders (
+  id         INT,
+  customer   TEXT,
+  total      NUMERIC,
+  created_at TIMESTAMPTZ
+)
+  SERVER remote_db
+  OPTIONS (schema_name 'public', table_name 'orders');
+```
+
+</Step>
+
+<Step>
+
+#### Query it like a local table
+
+```sql
+SELECT customer, SUM(total)
+FROM remote_orders
+WHERE created_at > now() - INTERVAL '30 days'
+GROUP BY customer
+ORDER BY 2 DESC;
+```
+
+</Step>
+
+</Steps>
+
+### Import a remote schema automatically
+
+Instead of creating foreign tables one by one, import an entire schema:
+
+```sql
+IMPORT FOREIGN SCHEMA public
+  FROM SERVER remote_db
+  INTO local_schema;
+```
+
+### Read files with `file_fdw`
+
+```sql
+CREATE EXTENSION file_fdw;
+
+CREATE SERVER local_files FOREIGN DATA WRAPPER file_fdw;
+
+CREATE FOREIGN TABLE access_log (
+  ts      TIMESTAMPTZ,
+  ip      TEXT,
+  path    TEXT,
+  status  INT
+)
+  SERVER local_files
+  OPTIONS (filename '/var/log/nginx/access.log', format 'csv');
+
+SELECT status, COUNT(*)
+FROM access_log
+GROUP BY status
+ORDER BY 2 DESC;
+```
+
+<Callout type="info">
+`file_fdw` reads files that are accessible by the IvorySQL server process. The server user must have read permission on the file, and the path must be visible from the server host (not the client).
+</Callout>
+
+### Available FDW extensions
+
+| Extension | Purpose |
+|-----------|---------|
+| `postgres_fdw` | Connect to other PostgreSQL or IvorySQL databases |
+| `file_fdw` | Read local CSV or text files as tables |
+| `oracle_fdw` | Connect to Oracle databases (third-party) |
+| `mysql_fdw` | Connect to MySQL / MariaDB (third-party) |
+| `redis_fdw` | Query Redis key-value stores (third-party) |
+
+For the full FDW reference see the [PostgreSQL FDW documentation](https://www.postgresql.org/docs/current/fdwhandler.html).
