@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "getting-started",
+    "deploy",
+    "oracle-compatibility",
+    "ecosystem",
+    "cloud-service",
+    "monitor-manage",
+    "migration",
+    "developers",
+    "reference"
+  ]
+}
