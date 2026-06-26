@@ -1,18 +1,22 @@
 {
   "title": "Ecosystem",
   "pages": [
-    "index",
+    "---Platform Support---",
     "cpu-architecture",
     "os-support",
+    "---Spatial & Geospatial---",
     "postgis",
+    "pgrouting",
+    "---AI & Vector Search---",
     "pgvector",
-    "pgddl",
+    "---Scheduling, Audit & Search---",
     "pg-cron",
+    "pgaudit",
+    "pgroonga",
+    "---Developer Tools---",
     "pgsql-http",
     "plpgsql-check",
-    "pgroonga",
-    "pgaudit",
-    "pgrouting",
+    "pgddl",
     "system-stats"
   ]
 }

@@ -58,13 +58,17 @@ Source the file:
 source ~/.bash_profile
 ```
 
-### Step 4: Initialize the database
+### Step 4: Grant permissions and initialize the database
+
+Grant permissions to the installation directory, then initialize:
 
 ```bash
+sudo chown -R ivorysql:ivorysql /usr/ivory-5/
+mkdir /usr/ivory-5/data
 initdb -D /usr/ivory-5/data
 ```
 
-> The `-D` flag specifies the database cluster directory. If you set `PGDATA` (Step 3), you can omit `-D`.
+> The `-D` flag specifies the database cluster directory. If you set `PGDATA` in Step 3, you can omit `-D`.
 
 ### Step 5: Start the service
 
@@ -72,11 +76,23 @@ initdb -D /usr/ivory-5/data
 pg_ctl -D /usr/ivory-5/data -l ivory.log start
 ```
 
-### Step 6: Verify
+The `-l` flag appends server log output to the named file. If the file does not exist, it is created.
+
+### Step 6: Verify the service is running
 
 ```bash
 ps -ef | grep postgres
 ```
+
+You should see `postgres` processes including `checkpointer`, `background writer`, `walwriter`, and `autovacuum launcher`.
+
+### Step 7: Connect to IvorySQL
+
+```bash
+psql -d ivorysql
+```
+
+You will see the `ivorysql=#` prompt. Type `\q` to exit.
 
 </Steps>
 

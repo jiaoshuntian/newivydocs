@@ -1,4 +1,10 @@
 {
-  "title": "Deploy",
-  "pages": ["index", "install-yum", "install-apt", "install-source", "install-rpm-deb", "cluster", "docker-podman", "docker-swarm", "kubernetes", "operator"]
+  "title": "Install & Deploy",
+  "pages": [
+    "install-yum",
+    "install-apt",
+    "install-rpm-deb",
+    "install-source",
+    "cluster"
+  ]
 }

@@ -6,9 +6,8 @@ export const docsImageRouteV4 = '/og/docs/v4';
 export const docsContentRouteV5 = '/llms.mdx/docs';
 export const docsContentRouteV4 = '/llms.mdx/docs/v4';
 
-// fill this with your actual GitHub info, for example:
 export const gitConfig = {
-  user: 'IvorySQL',
-  repo: 'IvorySQL',
+  user: 'jiaoshuntian',
+  repo: 'newivydocs',
   branch: 'main',
 };

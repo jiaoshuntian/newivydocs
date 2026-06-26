@@ -1,3 +1,4 @@
 {
-  "pages": ["dual-parser", "initdb"]
+  "title": "Architecture Overview",
+  "pages": ["dual-parser", "initdb", "dual-mode-design", "guc-framework"]
 }

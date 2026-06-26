@@ -3,6 +3,8 @@ title: Docker Swarm & Compose
 description: Deploy an IvorySQL high-availability cluster using Docker Swarm or Docker Compose with etcd and Patroni.
 ---
 
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+
 # Docker Swarm & Compose
 
 Both Docker Swarm and Docker Compose can deploy an IvorySQL HA cluster backed by Patroni and etcd. Swarm manages the cluster across multiple hosts; Compose runs each node independently with containers you connect manually.
@@ -89,17 +91,28 @@ docker service ls
 
 ### Connect
 
-Oracle-compatible port (primary):
-
+<Tabs items={['Oracle-compatible port', 'PostgreSQL port']}>
+<Tab>
 ```bash
 psql -h 127.0.0.1 -p 1521 -U ivorysql -d ivorysql
 ```
 
-PostgreSQL port (primary):
-
+```sql
+SHOW ivorysql.compatible_mode;
+--  oracle
+```
+</Tab>
+<Tab>
 ```bash
 psql -h 127.0.0.1 -p 5432 -U ivorysql -d ivorysql
 ```
+
+```sql
+SHOW ivorysql.compatible_mode;
+--  pg
+```
+</Tab>
+</Tabs>
 
 ### Uninstall
 
@@ -170,13 +183,28 @@ At this point a one-primary, two-standby cluster is running.
 
 ### Connect
 
+<Tabs items={['Oracle-compatible port', 'PostgreSQL port']}>
+<Tab>
 ```bash
-# Oracle-compatible port
 psql -h 127.0.0.1 -p 1521 -U ivorysql -d ivorysql
+```
 
-# PostgreSQL port
+```sql
+SHOW ivorysql.compatible_mode;
+--  oracle
+```
+</Tab>
+<Tab>
+```bash
 psql -h 127.0.0.1 -p 5432 -U ivorysql -d ivorysql
 ```
+
+```sql
+SHOW ivorysql.compatible_mode;
+--  pg
+```
+</Tab>
+</Tabs>
 
 ### Uninstall (run on each node)
 
@@ -190,6 +218,6 @@ docker-compose -f ./docker-compose-etcd1.yml down
 ## Next steps
 
 <Cards>
-  <Card href="/docs/v5/deploy/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a StatefulSet or a Patroni-managed HA cluster with Helm." />
-  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters declaratively with a Kubernetes custom resource." />
+  <Card href="/docs/v5/cloud-service/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a StatefulSet or a Patroni-managed HA cluster with Helm." />
+  <Card href="/docs/v5/cloud-service/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters declaratively with a Kubernetes custom resource." />
 </Cards>

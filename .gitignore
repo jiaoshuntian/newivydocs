@@ -25,5 +25,8 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 
+# generated PDF (large binary, regenerate with pnpm export-pdf)
+/public/*.pdf
+
 # subagent-driven development artifacts
 .sdd/

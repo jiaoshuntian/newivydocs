@@ -9,11 +9,20 @@ IvorySQL supports Oracle-compatible sequence syntax, allowing you to access sequ
 
 ## How It Works
 
-Sequences are database objects that generate integer sequences, similar to tables and views. They can be used by any object in the global database namespace and support both ascending and descending order.
+Sequences are database objects that generate unique integer values. In Oracle, you access sequence values by appending `.NEXTVAL` or `.CURRVAL` to the sequence name. IvorySQL implements this same dot-notation, so Oracle SQL can be used without modification.
+
+| Access Method | Description |
+|---|---|
+| `seq.NEXTVAL` | Advances the sequence and returns the new value |
+| `seq.CURRVAL` | Returns the most recently generated value for this session |
+
+<Callout type="info">
+  `CURRVAL` can only be used after `NEXTVAL` has been called at least once in the current session.
+</Callout>
 
 ## Examples
 
-### Create and use a sequence
+### Create and access a sequence
 
 ```sql
 CREATE SEQUENCE seq;
@@ -23,6 +32,18 @@ SELECT seq.NEXTVAL FROM dual;
 --  nextval
 -- ---------
 --        1
+
+-- Get the next value again
+SELECT seq.NEXTVAL FROM dual;
+--  nextval
+-- ---------
+--        2
+
+-- Get the current value (no increment)
+SELECT seq.CURRVAL FROM dual;
+--  currval
+-- ---------
+--        2
 ```
 
 ### Restart a sequence
@@ -36,8 +57,64 @@ SELECT seq.NEXTVAL FROM dual;
 --       10
 ```
 
+### Create a descending sequence
+
+```sql
+CREATE SEQUENCE seq_desc
+  START WITH 100
+  INCREMENT BY -1
+  MINVALUE 1
+  MAXVALUE 100;
+
+SELECT seq_desc.NEXTVAL FROM dual;
+--  nextval
+-- ---------
+--      100
+
+SELECT seq_desc.NEXTVAL FROM dual;
+--  nextval
+-- ---------
+--       99
+```
+
+### Use a sequence as a default value
+
+You can use `NEXTVAL` as the default value for a primary key column:
+
+```sql
+CREATE SEQUENCE order_seq START WITH 1000;
+
+CREATE TABLE orders (
+  order_id integer DEFAULT order_seq.NEXTVAL PRIMARY KEY,
+  customer_name varchar(100),
+  created_at timestamp DEFAULT now()
+);
+
+-- order_id is automatically assigned from the sequence
+INSERT INTO orders (customer_name) VALUES ('Alice');
+INSERT INTO orders (customer_name) VALUES ('Bob');
+
+SELECT order_id, customer_name FROM orders;
+--  order_id | customer_name
+-- ----------+---------------
+--      1000 | Alice
+--      1001 | Bob
+```
+
 ### Drop a sequence
 
 ```sql
 DROP SEQUENCE seq;
 ```
+
+## Sequence Options
+
+| Option | Description |
+|---|---|
+| `START WITH n` | Starting value (default: 1) |
+| `INCREMENT BY n` | Step size — positive for ascending, negative for descending (default: 1) |
+| `MINVALUE n` | Minimum value the sequence can reach |
+| `MAXVALUE n` | Maximum value the sequence can reach |
+| `CYCLE` | Wrap around when the limit is reached |
+| `NO CYCLE` | Stop with an error when the limit is reached (default) |
+| `CACHE n` | Number of values to preallocate in memory for performance |

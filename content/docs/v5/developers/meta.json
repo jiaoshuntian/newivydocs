@@ -1,4 +1,27 @@
 {
-  "title": "Developers",
-  "pages": ["index", "app-guide", "contributing", "compatibility-framework", "architecture", "built-in-functions", "compatibility-impl"]
+  "title": "Contribute & Develop",
+  "pages": [
+    "---Contributing---",
+    "contributing",
+    "app-guide",
+    "faq",
+    "---Architecture Overview---",
+    "compatibility-framework",
+    "architecture",
+    "---Feature Implementation Details---",
+    "like",
+    "out-parameter",
+    "rowid",
+    "type-rowtype",
+    "nls-parameters",
+    "function-stored-proc",
+    "nested-subfunctions",
+    "force-view",
+    "case-conversion",
+    "sys-guid",
+    "empty-string-null",
+    "call-into",
+    "sys-context",
+    "userenv"
+  ]
 }

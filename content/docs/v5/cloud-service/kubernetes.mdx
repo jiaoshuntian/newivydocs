@@ -3,6 +3,8 @@ title: Kubernetes
 description: Deploy IvorySQL on Kubernetes as a single-node pod or a Patroni-managed high-availability cluster using Helm.
 ---
 
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+
 # Kubernetes
 
 IvorySQL ships Kubernetes manifests for both single-node and high-availability deployments. The HA option uses Patroni for automatic leader election and failover.
@@ -61,19 +63,27 @@ kubectl get all -n ivorysql
 
 ### Connect
 
-PostgreSQL port:
-
+<Tabs items={['PostgreSQL port (pg mode)', 'Oracle-compatible port (oracle mode)']}>
+<Tab>
 ```bash
 psql -U ivorysql -p 32106 -h 127.0.0.1 -d ivorysql
 ```
 
-Oracle-compatible port:
+Verify compatibility mode:
 
+```sql
+SHOW ivorysql.compatible_mode;
+--  ivorysql.compatible_mode
+-- --------------------------
+--  pg
+```
+</Tab>
+<Tab>
 ```bash
 psql -U ivorysql -p 31887 -h 127.0.0.1 -d ivorysql
 ```
 
-Verify the compatibility mode:
+Verify compatibility mode:
 
 ```sql
 SHOW ivorysql.compatible_mode;
@@ -81,6 +91,8 @@ SHOW ivorysql.compatible_mode;
 -- --------------------------
 --  oracle
 ```
+</Tab>
+</Tabs>
 
 ### Uninstall
 
@@ -144,37 +156,77 @@ pod/ivorysql-patroni-hac-2   1/1     Running   0          41s
 
 ### Connect to the primary
 
-PostgreSQL port:
-
+<Tabs items={['PostgreSQL port (pg mode)', 'Oracle-compatible port (oracle mode)']}>
+<Tab>
 ```bash
 psql -U ivorysql -p 32391 -h 127.0.0.1 -d ivorysql
 ```
 
-Oracle-compatible port:
-
-```bash
-psql -U ivorysql -p 32477 -h 127.0.0.1 -d ivorysql
-```
-
-Confirm this is the primary:
+Confirm this is the primary and check mode:
 
 ```sql
+SHOW ivorysql.compatible_mode;
+--  ivorysql.compatible_mode
+-- --------------------------
+--  pg
+
 SELECT pg_is_in_recovery();
 --  pg_is_in_recovery
 -- -------------------
 --  f
 ```
+</Tab>
+<Tab>
+```bash
+psql -U ivorysql -p 32477 -h 127.0.0.1 -d ivorysql
+```
+
+Confirm this is the primary and check mode:
+
+```sql
+SHOW ivorysql.compatible_mode;
+--  ivorysql.compatible_mode
+-- --------------------------
+--  oracle
+
+SELECT pg_is_in_recovery();
+--  pg_is_in_recovery
+-- -------------------
+--  f
+```
+</Tab>
+</Tabs>
 
 ### Connect to a standby
 
+<Tabs items={['PostgreSQL port (pg mode)', 'Oracle-compatible port (oracle mode)']}>
+<Tab>
 ```bash
 psql -U ivorysql -p 30111 -h 127.0.0.1 -d ivorysql
 ```
 
 ```sql
+SHOW ivorysql.compatible_mode;
+--  pg
+
 SELECT pg_is_in_recovery();
 --  t
 ```
+</Tab>
+<Tab>
+```bash
+psql -U ivorysql -p 32654 -h 127.0.0.1 -d ivorysql
+```
+
+```sql
+SHOW ivorysql.compatible_mode;
+--  oracle
+
+SELECT pg_is_in_recovery();
+--  t
+```
+</Tab>
+</Tabs>
 
 ### Uninstall
 
@@ -196,6 +248,6 @@ done
 ## Next steps
 
 <Cards>
-  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters declaratively on Kubernetes with a custom resource." />
+  <Card href="/docs/v5/cloud-service/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters declaratively on Kubernetes with a custom resource." />
   <Card href="/docs/v5/cloud-service" title="IvorySQL Cloud" description="Fully managed IvorySQL with a web control plane — no cluster management required." />
 </Cards>

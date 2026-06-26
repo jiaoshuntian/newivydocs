@@ -1,3 +1,0 @@
-{
-  "pages": ["index", "like", "out-parameter", "rowid", "type-rowtype", "nls-parameters", "function-stored-proc", "nested-subfunctions", "force-view", "case-conversion", "sys-guid", "empty-string-null", "call-into"]
-}

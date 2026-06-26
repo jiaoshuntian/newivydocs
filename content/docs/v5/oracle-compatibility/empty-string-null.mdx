@@ -5,15 +5,38 @@ description: Automatically convert empty strings to NULL values in Oracle compat
 
 # Empty String to NULL
 
-In Oracle, an empty string (`''`) is treated as `NULL`. IvorySQL replicates this behavior in Oracle compatibility mode, so that applications expecting Oracle semantics work correctly without modification.
+In Oracle, an empty string (`''`) is treated as `NULL`. PostgreSQL treats them as distinct values. IvorySQL replicates the Oracle behavior in Oracle compatibility mode, so that applications expecting Oracle semantics work correctly without modification.
 
 ## How It Works
 
 The feature is controlled by the GUC parameter `ivorysql.enable_emptystring_to_null`:
 
-- **Default**: `on` (in Oracle mode)
-- When enabled, any inserted empty string is automatically converted to `NULL` for storage.
-- Converted `NULL` values can be queried using the `IS NULL` condition.
+| Setting | Behavior |
+|---|---|
+| `on` (default in Oracle mode) | Empty strings are stored as `NULL` |
+| `off` | Empty strings are stored as empty strings (PostgreSQL behavior) |
+
+When enabled, any inserted empty string is automatically converted to `NULL` for storage. Converted `NULL` values can be queried using the `IS NULL` condition.
+
+<Callout type="warn">
+  This behavior differs from standard PostgreSQL, where `''` and `NULL` are distinct. Be aware of this when mixing Oracle-mode and PostgreSQL-mode access to the same data.
+</Callout>
+
+## Checking and Setting the Parameter
+
+```sql
+-- Check the current setting
+SHOW ivorysql.enable_emptystring_to_null;
+--  ivorysql.enable_emptystring_to_NULL
+-- -------------------------------------
+--  on
+
+-- Disable the conversion (use PostgreSQL behavior)
+SET ivorysql.enable_emptystring_to_null = off;
+
+-- Re-enable Oracle behavior
+SET ivorysql.enable_emptystring_to_null = on;
+```
 
 ## Example
 
@@ -21,7 +44,7 @@ The feature is controlled by the GUC parameter `ivorysql.enable_emptystring_to_n
 -- Create test table
 CREATE TABLE abc (id int);
 
--- Check parameter status
+-- Verify parameter is enabled
 SHOW ivorysql.enable_emptystring_to_null;
 --  ivorysql.enable_emptystring_to_NULL
 -- -------------------------------------
@@ -29,19 +52,36 @@ SHOW ivorysql.enable_emptystring_to_null;
 
 -- Insert an empty string
 INSERT INTO abc VALUES('');
-INSERT 0 1
+-- INSERT 0 1
 
--- Query the data — it shows as NULL
+-- Query the data — it shows as NULL (the empty string was converted)
 SELECT * FROM abc;
 --  id
 -- ----
 --
 -- (1 row)
 
--- Query using IS NULL
+-- Confirm the value is NULL, not an empty string
 SELECT * FROM abc WHERE id IS NULL;
 --  id
 -- ----
 --
 -- (1 row)
+
+-- An empty-string comparison returns nothing (the value is NULL, not '')
+SELECT * FROM abc WHERE id = '';
+-- (0 rows)
+```
+
+## Oracle vs PostgreSQL Comparison
+
+```sql
+-- Oracle behavior (ivorysql.enable_emptystring_to_null = on)
+INSERT INTO abc VALUES('');
+SELECT id IS NULL FROM abc;  -- true
+
+-- PostgreSQL behavior (ivorysql.enable_emptystring_to_null = off)
+INSERT INTO abc VALUES('');
+SELECT id IS NULL FROM abc;  -- false ('' is not NULL)
+SELECT id = '' FROM abc;     -- true
 ```

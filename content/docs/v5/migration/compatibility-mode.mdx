@@ -1,0 +1,191 @@
+---
+title: Enable Oracle Compatibility Mode
+description: Initialize IvorySQL in Oracle-compatible mode and configure per-session compatibility behavior using GUC parameters.
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# Enable Oracle Compatibility Mode
+
+IvorySQL supports two operating modes — **Oracle-compatible** and **PostgreSQL** — controlled through a dedicated GUC (Grand Unified Configuration) framework. You choose the mode at database initialization time, and can then fine-tune compatibility behavior at the session or database level using GUC parameters.
+
+## Database Modes
+
+IvorySQL is initialized with either Oracle-compatible mode or standard PostgreSQL mode. This choice is made once at `initdb` time and cannot be changed afterward.
+
+| Mode | Behavior |
+|------|----------|
+| `oracle` (default) | Full Oracle syntax and function compatibility enabled |
+| `pg` | Standard PostgreSQL behavior, Oracle compatibility disabled |
+
+<Callout type="info">
+If you do not specify `-m` during `initdb`, IvorySQL defaults to Oracle-compatible mode.
+</Callout>
+
+### Initialize with a specific mode
+
+<Steps>
+<Step>
+
+**Initialize in Oracle-compatible mode (default)**
+
+```bash
+./initdb -D ../data -m oracle
+# or simply:
+./initdb -D ../data
+```
+
+</Step>
+<Step>
+
+**Initialize in PostgreSQL mode**
+
+```bash
+./initdb -D ../data -m pg
+```
+
+Once initialized in PG mode, the database will no longer accept Oracle syntax.
+
+</Step>
+<Step>
+
+**Start the database**
+
+```bash
+./pg_ctl -D ../data start
+```
+
+</Step>
+</Steps>
+
+### How mode is determined at runtime
+
+When the server starts, it reads the initialization mode from `ivorysql.database_mode`. In Oracle mode, additional SQL (`postgres_oracle.bki`) is executed to enable compatibility features.
+
+```
+database_mode = DB_PG     → PostgreSQL mode, Oracle compatibility off
+database_mode = DB_ORACLE → Oracle-compatible mode, full compatibility on
+```
+
+## Available Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `ivorysql.compatible_mode` | Controls whether the current session uses PG or Oracle mode. Changed with `SET`, reset to the database's default with `RESET` or `RESET ALL`. |
+| `ivorysql.database_mode` | Shows the database's initialization mode (PG or Oracle). **Read-only** — `SET`/`RESET` have no effect on this parameter. |
+| `ivorysql.datetime_ignore_nls_mask` | Controls which date/time types are excluded from NLS formatting. Values 0–15. Default: `0`. |
+| `ivorysql.enable_emptystring_to_null` | When `on`, converts inserted empty strings to `NULL`. See [Empty String to NULL](/docs/v5/oracle-compatibility/empty-string-null). |
+| `ivorysql.identifier_case_switch` | Sets the identifier case conversion mode. See [Case Conversion](/docs/v5/oracle-compatibility/case-conversion). |
+| `ivorysql.listen_address` | The address for Oracle-compatible mode listening. Configured via `ivorysql.conf` at init time — requires a restart to change. |
+| `ivorysql.port` | The port number for Oracle-compatible connections. Configured via `ivorysql.conf` at init time — requires a restart to change. |
+| `nls_date_format` | Default date format. Default: `'YYYY-MM-DD'`. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `nls_length_semantics` | Controls whether character size units are bytes or characters. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `nls_timestamp_format` | Controls timestamp formatting. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `nls_timestamp_tz_format` | Controls timestamp with time zone formatting. See [NLS Parameters](/docs/v5/oracle-compatibility/nls-parameters). |
+| `shared_preload_libraries` | Libraries loaded at server start. Configured via `ivorysql.conf` — requires a restart to change. |
+
+## Switching Mode at Session Level
+
+`ivorysql.compatible_mode` lets you switch between PG and Oracle behavior within a session, even if the database was initialized in Oracle mode. This is useful for testing or for running mixed workloads.
+
+```sql
+-- Switch the current session to Oracle-compatible mode
+SET ivorysql.compatible_mode TO oracle;
+
+-- Switch back to PostgreSQL mode for this session
+SET ivorysql.compatible_mode TO pg;
+
+-- Check the current session mode
+SHOW ivorysql.compatible_mode;
+
+-- Check the database-level initialization mode (read-only)
+SHOW ivorysql.database_mode;
+
+-- Reset session mode back to the database default
+RESET ivorysql.compatible_mode;
+```
+
+<Callout type="warn">
+`ivorysql.database_mode` reflects the mode the database was initialized with and cannot be changed at runtime. Only `ivorysql.compatible_mode` is adjustable per session.
+</Callout>
+
+## datetime_ignore_nls_mask Reference
+
+This parameter controls which date/time types bypass NLS formatting. Use it to selectively opt specific types out of NLS date format processing.
+
+| Value | Types excluded from NLS formatting |
+|-------|-------------------------------------|
+| 0 | None — all date/time types use NLS formatting |
+| 1 | `date` |
+| 2 | `timestamp` |
+| 3 | `date`, `timestamp` |
+| 4 | `timestamptz` |
+| 5 | `date`, `timestamptz` |
+| 6 | `timestamp`, `timestamptz` |
+| 7 | `date`, `timestamp`, `timestamptz` |
+| 8 | `timestampltz` |
+| 9 | `date`, `timestampltz` |
+| 10 | `timestamp`, `timestampltz` |
+| 11 | `date`, `timestamp`, `timestampltz` |
+| 12 | `timestamptz`, `timestampltz` |
+| 13 | `date`, `timestamptz`, `timestampltz` |
+| 14 | `timestamp`, `timestamptz`, `timestampltz` |
+| 15 | All date/time types |
+
+### Example: controlling NLS date formatting
+
+```sql
+-- Switch to Oracle-compatible mode
+SET ivorysql.compatible_mode TO oracle;
+
+-- Check current settings
+SHOW nls_date_format;
+--  nls_date_format
+-- -----------------
+--  YYYY-MM-DD
+
+SHOW ivorysql.datetime_ignore_nls_mask;
+--  ivorysql.datetime_ignore_nls_mask
+-- -----------------------------------
+--  0
+
+-- Create a test table
+CREATE TABLE test_nls_date(a int, created_at date);
+
+-- Insert data using the default NLS format (YYYY-MM-DD → accepts YYYY/MM/DD)
+INSERT INTO test_nls_date VALUES(1, '2024/04/05');
+SELECT * FROM test_nls_date;
+--  a | created_at
+-- ---+------------
+--  1 | 2024-04-05
+
+-- Change the NLS date format
+SET nls_date_format TO 'yy-mm-dd';
+
+-- Insert with the new NLS format — succeeds
+INSERT INTO test_nls_date VALUES(2, '24/04/15');
+SELECT * FROM test_nls_date;
+--  a | created_at
+-- ---+------------
+--  1 | 24-04-05
+--  2 | 24-04-15
+
+-- Disable NLS processing for the date type (mask = 1)
+SET ivorysql.datetime_ignore_nls_mask TO 1;
+
+-- This now fails because the date column no longer uses NLS formatting
+INSERT INTO test_nls_date VALUES(3, '24/05/15');
+-- ERROR:  date/time field value out of range: "24/05/15"
+-- HINT:  Perhaps you need a different "datestyle" setting.
+
+-- Query still works fine — NLS mask does not affect reads
+SELECT * FROM test_nls_date;
+--  a | created_at
+-- ---+------------
+--  1 | 24-04-05
+--  2 | 24-04-15
+```
+
+<Callout type="info">
+The `datetime_ignore_nls_mask` setting only affects how string literals are **parsed** into date/time values on insert. It does not change how existing date values are **displayed** in query results.
+</Callout>

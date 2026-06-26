@@ -1,0 +1,47 @@
+---
+title: sys_guid() Implementation
+description: Random unique identifier generation using uuid-ossp, uuid-e2fs, or arc4random fallback for Oracle-compatible GUID generation.
+---
+
+# sys_guid() Implementation
+
+IvorySQL's `sys_guid()` generates and returns a 16-byte database-level unique identifier (raw value), compatible with Oracle's `SYS_GUID()` function.
+
+## Oracle Behavior
+
+In Oracle, `SYS_GUID()` returns a globally unique identifier as a 16-byte `RAW` value. It is typically used to generate primary keys that are unique across distributed databases. IvorySQL maps this to a raw 16-byte value derived from a UUID.
+
+## Usage
+
+```sql
+-- Generate a GUID
+SELECT sys_guid();
+
+-- Use as a default column value
+CREATE TABLE my_table (
+    id RAW(16) DEFAULT sys_guid() PRIMARY KEY,
+    name VARCHAR2(100)
+);
+```
+
+## Implementation Strategy
+
+The `sys_guid()` function is implemented by modifying the code of the `uuid-ossp` extension. To leverage various underlying UUID libraries, the following fallback logic is adopted:
+
+1. **uuid-ossp** — If the `uuid-ossp` extension exists in the system, `uuid_make()` is used.
+2. **uuid-e2fs** — If the `uuid-e2fs` library exists, `uuid_generate_random()` is used.
+3. **arc4random** — Otherwise, `arc4random()` is used as the fallback.
+
+The code was also modified so that IvorySQL can load the `uuid-ossp` extension automatically during initialization, ensuring the primary path is always available.
+
+## Multi-Tier Fallback Rationale
+
+The three-tier approach ensures `sys_guid()` works regardless of which UUID libraries are available on the host system:
+
+| Priority | Library | Function | Notes |
+|---|---|---|---|
+| 1 | uuid-ossp | `uuid_make()` | Preferred; cryptographically strong |
+| 2 | uuid-e2fs | `uuid_generate_random()` | Good alternative on Linux systems |
+| 3 | arc4random | `arc4random()` | Fallback when no UUID library is present |
+
+The automatic loading of `uuid-ossp` during `initdb` guarantees that the first path is always available in a standard IvorySQL installation, while the fallback chain handles unusual deployment environments where the extension may not be available.

@@ -68,4 +68,57 @@ Expected output:
 
 ## Usage
 
-For detailed usage instructions, refer to the [pgddl/ddlx official documentation](https://github.com/lacanoid/pgddl).
+### Extract a Table's DDL
+
+Create a sample table and extract its `CREATE TABLE` statement:
+
+```sql
+CREATE TABLE employees (
+    id     serial PRIMARY KEY,
+    name   text NOT NULL,
+    salary numeric(10, 2)
+);
+
+SELECT ddlx_script('employees'::regclass);
+```
+
+Output:
+
+```sql
+CREATE TABLE public.employees (
+    id     integer NOT NULL DEFAULT nextval('employees_id_seq'::regclass),
+    name   text NOT NULL,
+    salary numeric(10,2)
+);
+ALTER TABLE public.employees ADD CONSTRAINT employees_pkey PRIMARY KEY (id);
+```
+
+### Extract DDL for Multiple Objects
+
+Use `ddlx_scripts` with a query to extract DDL for several objects at once:
+
+```sql
+SELECT ddlx_scripts(
+    'SELECT oid FROM pg_class WHERE relnamespace = ''public''::regnamespace'
+);
+```
+
+### Extract a Function's DDL
+
+```sql
+CREATE OR REPLACE FUNCTION add_numbers(a int, b int) RETURNS int AS $$
+BEGIN
+    RETURN a + b;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT ddlx_script('add_numbers(int, int)'::regprocedure);
+```
+
+<Callout type="warn">
+Always review generated DDL scripts in a non-production environment before applying them. pgddl (ddlx) is still under active development and may not cover all PostgreSQL object types.
+</Callout>
+
+## Further Reading
+
+For the full function reference, refer to the [pgddl/ddlx official documentation](https://github.com/lacanoid/pgddl).

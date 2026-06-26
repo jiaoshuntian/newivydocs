@@ -66,10 +66,10 @@ Each `USERENV` parameter maps to a dedicated function in the `sys` schema. These
 | Parameter | Return Value |
 |---|---|
 | `sid` | The user ID of the current session. |
-| `sessionid` | Returns the audit session identifier. |
-| `language` | Returns the language, territory, and character set of the current database session. |
-| `lang` | Returns the ISO abbreviation of the language name. |
-| `isdba` | Returns `TRUE` if the user has been authenticated as an administrator or has administrator privileges; otherwise returns `FALSE`. |
-| `client_info` | Up to 64 bytes of user session information. |
-| `entryid` | The current audit entry number. |
-| `terminal` | The operating system identifier for the client. |
+| `sessionid` | Returns the audit session identifier. You cannot use this attribute in distributed SQL statements. |
+| `language` | Returns the language, territory, and character set of the current database session in the form `language_territory.characterset`. |
+| `lang` | Returns the ISO abbreviation of the language name. A shorter form than `LANGUAGE`. |
+| `isdba` | Returns `TRUE` if the user has been authenticated as an administrator or has administrator privileges through the operating system or password file; otherwise returns `FALSE`. |
+| `client_info` | Returns up to 64 bytes of user session information that can be stored by an application using `DBMS_APPLICATION_INFO`. |
+| `entryid` | The current audit entry number. The audit entry ID sequence is shared between fine-grained audit records and regular audit records. You cannot use this attribute in distributed SQL statements. |
+| `terminal` | The operating system identifier for the client of the current session. In distributed SQL statements, this returns the identifier for the local session. |

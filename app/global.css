@@ -6,6 +6,24 @@ html {
   scrollbar-gutter: stable;
 }
 
+@media print {
+  #nd-docs-layout {
+    --fd-sidebar-width: 0px !important;
+  }
+
+  #nd-sidebar {
+    display: none;
+  }
+
+  #nd-toc {
+    display: none;
+  }
+
+  #nd-nav {
+    display: none;
+  }
+}
+
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;

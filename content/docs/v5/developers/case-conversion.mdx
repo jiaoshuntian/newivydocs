@@ -1,0 +1,85 @@
+---
+title: Case Conversion Implementation
+description: Quoted identifier case conversion modes (normal, interchange, lowercase) and the GUC parameter pipeline from initdb through backend initialization.
+---
+
+# Case Conversion Implementation
+
+To meet Oracle's quoted identifier case compatibility requirements, IvorySQL has designed three case conversion modes for quoted identifiers. The mode is set at `initdb` time with the `-C` flag and stored in `pg_control` so every backend inherits it automatically.
+
+## Three Conversion Modes
+
+| Mode | Behavior | Use Case |
+|---|---|---|
+| `normal` | Default PostgreSQL behavior — unquoted identifiers are folded to lowercase. | Running in PG-compatible mode. |
+| `interchange` | Unquoted identifiers are uppercased; matching is case-insensitive. | Full Oracle compatibility. |
+| `lowercase` | All identifiers (quoted and unquoted) are forced to lowercase. | Legacy mixed-case schemas migrated to lowercase. |
+
+### Setting the Mode
+
+Pass the `-C` parameter to `initdb`:
+
+```bash
+# Oracle-compatible uppercase mode (recommended for Oracle migrations)
+initdb -m oracle -C interchange -D /path/to/datadir
+
+# Force all identifiers to lowercase
+initdb -m oracle -C lowercase -D /path/to/datadir
+
+# Standard PostgreSQL behavior
+initdb -m oracle -C normal -D /path/to/datadir
+```
+
+The selected mode is stored in `pg_control` and automatically applied to every backend session without any additional per-connection configuration.
+
+## Initialization Pipeline
+
+When the `-C` parameter is passed during database initialization, `Initdb.c->main()` processes this parameter and sets the global variable `caseswitchmode`. Then `initdb` starts a `postgres` process in `-boot` mode to set up the `template1` database, passing the parameter `-C ivorysql.identifier_case_switch=caseswitchmode` to the new process.
+
+### pg_control Storage
+
+The backend process writes the `identifier_case_switch` information to the `pg_control` file:
+
+```c
+BootstrapModeMain() -> BootStrapXLOG();
+    /* save database compatible level value */
+    ControlFile->dbmode = bootstrap_database_mode;
+    ControlFile->casemode = identifier_case_switch;
+
+    /* some additional ControlFile fields are set in WriteControlFile() */
+    WriteControlFile();
+```
+
+Storing the mode in `pg_control` means it is a database-level setting that survives restarts and is shared across all connections — there is no risk of a backend using a different mode than the one `initdb` was called with.
+
+### Postmaster Initialization
+
+When a user starts the database via `pg_ctl`, the `postmaster` process reads the `pg_control` file:
+
+```
+PostmasterMain() --> SetCaseGucOption() --> GetCaseSwitchModeFromControl()
+```
+
+After reading the parameter value, `SetConfigOption()` assigns the value to the `ivorysql.identifier_case_switch` GUC.
+
+### Backend Process Inheritance
+
+When each new backend process starts (forked from `postmaster`), it automatically inherits the same `ivorysql.identifier_case_switch` parameter value. It processes the startup packet and, if it contains `database` or `user` parameters, applies the case conversion:
+
+```
+BackendMain() -> BackendInitialize() -> ProcessStartupPacket()
+```
+
+### SQL Statement Processing
+
+When processing user SQL statements containing identifiers, case conversion is applied. The logic is distributed across:
+
+- `SplitIdentifierString()`
+- `quoteOneName()`
+- `SplitGUCList()`
+
+These functions apply the appropriate case transformation to each identifier based on the current `ivorysql.identifier_case_switch` setting before the identifier enters the namespace resolution path.
+
+## Relationship to GUC Parameter
+
+The runtime GUC parameter `ivorysql.identifier_case_switch` reflects the value stored in `pg_control`. It is read-only from the user perspective — changing it at session level does not affect identifier parsing, which reads the postmaster-level value established at startup.

@@ -1,0 +1,64 @@
+---
+title: Dual-Mode Design
+description: How IvorySQL's database_mode flag selects between Oracle-compatible and PostgreSQL modes at initdb time, and how the mode governs startup behavior.
+---
+
+# Dual-Mode Design
+
+IvorySQL supports two operating modes at the database level: Oracle-compatible mode and standard PostgreSQL mode. The mode is fixed at cluster initialization time via the `-m` flag on `initdb` and cannot be changed afterward.
+
+## The `database_mode` Variable
+
+The internal variable `database_mode` records which mode the cluster was initialized with:
+
+| Value | Meaning |
+|-------|---------|
+| `DB_PG` | PostgreSQL mode — Oracle compatibility is disabled and cannot be switched on at runtime |
+| `DB_ORACLE` | Oracle-compatible mode — Oracle SQL syntax, PL/iSQL, and compatibility functions are active |
+
+`database_mode` is read-only at runtime. `SET` and `RESET` have no effect on it. Use `SHOW ivorysql.database_mode` to inspect the current value.
+
+## Selecting the Mode at `initdb`
+
+Pass `-m oracle` or `-m pg` to `initdb`:
+
+```bash
+# Oracle-compatible mode (default when -m is omitted)
+./initdb -D ../data -m oracle
+
+# PostgreSQL mode — Oracle syntax will not be available
+./initdb -D ../data -m pg
+
+# Omitting -m defaults to Oracle-compatible mode
+./initdb -D ../data
+```
+
+<Callout type="warn">
+Once a cluster is initialized, its `database_mode` cannot be changed. To switch modes, you must reinitialize the cluster with a new data directory.
+</Callout>
+
+## How the Mode Affects Startup
+
+When `postgres` starts, it reads `database_mode` from the control file. In Oracle mode, the server additionally loads `postgres_oracle.bki`, which registers Oracle-specific catalog entries — types, operators, functions, and built-ins — that are required by the Oracle compatibility layer.
+
+In PostgreSQL mode (`DB_PG`), `postgres_oracle.bki` is skipped entirely. No Oracle-specific catalog entries are loaded and no Oracle syntax is available, even via `SET ivorysql.compatible_mode TO oracle`.
+
+## Session-Level Switching
+
+Within an Oracle-mode cluster, individual sessions can switch between Oracle and PostgreSQL behavior using `ivorysql.compatible_mode`:
+
+```sql
+-- Switch current session to PostgreSQL behavior
+SET ivorysql.compatible_mode TO pg;
+
+-- Switch back to Oracle behavior
+SET ivorysql.compatible_mode TO oracle;
+
+-- Inspect current session mode
+SHOW ivorysql.compatible_mode;
+
+-- Inspect cluster-level initialization mode (read-only)
+SHOW ivorysql.database_mode;
+```
+
+This session-level switch is only available in Oracle-mode clusters. In a `DB_PG` cluster, `ivorysql.compatible_mode` cannot be set to `oracle`.

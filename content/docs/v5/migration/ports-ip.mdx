@@ -1,0 +1,132 @@
+---
+title: Configure Dual-Port Access
+description: Run Oracle-compatible and PostgreSQL listeners side by side so existing Oracle connection strings work without reconfiguration.
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# Configure Dual-Port Access
+
+IvorySQL runs two listeners side by side: the standard PostgreSQL listener and a dedicated Oracle-compatible listener. This lets Oracle-compatible clients connect on the same port they used with Oracle (default 1521), while PostgreSQL clients continue using port 5432 — no application reconfiguration needed.
+
+## Connection Parameters
+
+Two parameters extend the standard `host`/`port` connection options for Oracle-compatible connections:
+
+| Parameter | Description |
+|-----------|-------------|
+| `ivoryhost` | The IP address or hostname for the Oracle-compatible listener. Behaves like `host` but targets the Oracle-compatible endpoint. |
+| `ivoryport` | The port number for the Oracle-compatible listener. Separate from the PostgreSQL port and configurable at build time, init time, and runtime. |
+
+## Default Ports
+
+| Listener | Default Port |
+|----------|-------------|
+| PostgreSQL | 5432 |
+| Oracle-compatible (`ivoryport`) | 1521 |
+
+## Configuration
+
+You can set the Oracle-compatible port at three different stages. Earlier stages set a persistent default; later stages override it for that invocation.
+
+### Build time: set the compiled-in default
+
+Pass `--with-oraport` to `./configure` to change the built-in default Oracle-compatible port:
+
+```bash
+./configure --with-oraport=5555
+```
+
+This becomes the default port used when no other value is specified at init or runtime.
+
+### Init time: start with defaults
+
+After building, initialize and start the cluster normally. The Oracle-compatible listener starts automatically on the port compiled in (or 1521 if `--with-oraport` was not set):
+
+<Steps>
+<Step>
+
+**Initialize the data directory**
+
+```bash
+./initdb -D ../data
+```
+
+</Step>
+<Step>
+
+**Start the server**
+
+```bash
+./pg_ctl -D ../data start
+```
+
+The server now listens on both the PostgreSQL port (5432) and the Oracle-compatible port (1521 by default).
+
+</Step>
+</Steps>
+
+### Runtime: override ports at startup
+
+Use `pg_ctl -o` to pass server options that override the compiled-in defaults for a single startup. The `-p` flag sets the PostgreSQL port; the `-o` flag sets the Oracle-compatible port:
+
+```bash
+./pg_ctl -o "-p 5433 -o 1522" -D ../data
+```
+
+| Flag | Sets |
+|------|------|
+| `-p 5433` | PostgreSQL listener port |
+| `-o 1522` | Oracle-compatible listener port |
+
+<Callout type="info">
+The outer `-o` in `pg_ctl -o "..."` passes the quoted string as server options. Inside the quotes, `-p` and `-o` are interpreted by the `postgres` process itself, not by `pg_ctl`.
+</Callout>
+
+## Persistent configuration via ivorysql.conf
+
+To make port and address changes permanent, edit `ivorysql.conf` in your data directory and restart the server:
+
+```ini
+# ivorysql.conf
+ivorysql.port           = 1521
+ivorysql.listen_address = localhost
+```
+
+After editing, restart the server for the changes to take effect:
+
+```bash
+./pg_ctl -D ../data restart
+```
+
+## Verify current settings
+
+Connect via `psql` and query the GUC parameters to confirm the active configuration:
+
+```sql
+SHOW ivorysql.port;
+--  ivorysql.port
+-- ---------------
+--  1521
+
+SHOW ivorysql.listen_address;
+--  ivorysql.listen_address
+-- -------------------------
+--  localhost
+```
+
+<Callout type="warn">
+`ivorysql.port` and `ivorysql.listen_address` are read from `ivorysql.conf` at server start. Changing them with `SET` in a session has no effect — a full server restart is required.
+</Callout>
+
+## Connecting to the Oracle-compatible listener
+
+Use `ivoryport` (and optionally `ivoryhost`) in your connection string to target the Oracle-compatible endpoint:
+
+```bash
+# Connect using the Oracle-compatible port
+psql -h localhost -p 1521 -U myuser mydb
+
+# Or using the ivoryhost/ivoryport parameters in a connection string
+psql "host=localhost ivoryport=1521 user=myuser dbname=mydb"
+```

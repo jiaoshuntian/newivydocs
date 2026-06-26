@@ -2,11 +2,11 @@
   "pages": [
     "getting-started",
     "deploy",
+    "cloud-service",
+    "migration",
     "oracle-compatibility",
     "ecosystem",
-    "cloud-service",
     "monitor-manage",
-    "migration",
     "developers",
     "reference"
   ]

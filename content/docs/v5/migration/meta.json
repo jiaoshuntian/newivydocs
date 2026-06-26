@@ -1,4 +1,4 @@
 {
-  "title": "Data Migration",
-  "pages": ["index"]
+  "title": "Migrate from Oracle",
+  "pages": ["migrate-ora2pg", "compatibility-mode", "ports-ip"]
 }

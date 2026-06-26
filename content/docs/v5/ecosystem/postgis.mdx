@@ -75,4 +75,61 @@ Expected output:
 
 ## Usage
 
-For information about using PostGIS, refer to the [PostGIS 3.5 Official Documentation](https://postgis.net/docs/manual-3.5).
+### Store and Query Spatial Data
+
+Create a table with a geometry column and insert point data:
+
+```sql
+CREATE TABLE locations (
+    id    serial PRIMARY KEY,
+    name  text,
+    geom  geometry(Point, 4326)  -- SRID 4326 = WGS 84 latitude/longitude
+);
+
+INSERT INTO locations (name, geom) VALUES
+    ('Beijing',  ST_GeomFromText('POINT(116.4074 39.9042)',  4326)),
+    ('Shanghai', ST_GeomFromText('POINT(121.4737 31.2304)', 4326)),
+    ('Shenzhen', ST_GeomFromText('POINT(114.0579 22.5431)', 4326));
+```
+
+### Calculate Distance Between Points
+
+```sql
+-- Distance in meters using geography cast
+SELECT
+    a.name AS from_city,
+    b.name AS to_city,
+    ST_Distance(
+        a.geom::geography,
+        b.geom::geography
+    ) / 1000 AS distance_km
+FROM locations a, locations b
+WHERE a.name = 'Beijing' AND b.name = 'Shanghai';
+```
+
+### Find Points Within a Radius
+
+```sql
+-- Find all locations within 1000 km of Beijing
+SELECT name
+FROM locations
+WHERE ST_DWithin(
+    geom::geography,
+    ST_GeomFromText('POINT(116.4074 39.9042)', 4326)::geography,
+    1000000  -- meters
+);
+```
+
+### Create a Spatial Index
+
+```sql
+CREATE INDEX locations_geom_idx ON locations USING GIST (geom);
+```
+
+<Callout type="info">
+Always create a GIST spatial index on geometry columns used in queries. Without an index, spatial queries perform full table scans.
+</Callout>
+
+## Further Reading
+
+For the full function reference, refer to the [PostGIS 3.5 Official Documentation](https://postgis.net/docs/manual-3.5).

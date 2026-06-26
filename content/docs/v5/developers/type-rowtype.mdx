@@ -46,7 +46,18 @@ Support for `%ROWTYPE` in function types was added to `ora_gram.y`:
     }
 ```
 
-A `bool row_type` member was added to the `TypeName` struct. In `LookupTypeName`, when `row_type` is `TRUE`, the schema and table name are extracted from `TypeName->names` to retrieve the table's `typeoid`.
+A `bool row_type` member was added to the `TypeName` struct alongside the existing `pct_type` field:
+
+```c
+typedef struct TypeName
+{
+    bool    pct_type;   /* %TYPE specified? */
+    bool    row_type;   /* %ROWTYPE specified? */
+    /* ... other fields */
+}
+```
+
+In `LookupTypeName`, when `row_type` is `TRUE`, the schema and table name are extracted from `TypeName->names` to retrieve the table's `typeoid`. This avoids a separate code path — the grammar rule sets `row_type = true` and the existing type resolution machinery handles the rest.
 
 ## INSERT Statement Enhancement
 

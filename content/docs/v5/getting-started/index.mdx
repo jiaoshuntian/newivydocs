@@ -1,16 +1,79 @@
 ---
-title: Getting Started
-description: Learn what IvorySQL is, get up and running quickly, and understand core concepts.
+title: What is IvorySQL?
+description: IvorySQL is an Oracle-compatible, open-source PostgreSQL distribution. Learn what it is, how it works, and who it is for.
 ---
 
-# Getting Started
+# What is IvorySQL?
 
-IvorySQL is an advanced, Oracle-compatible PostgreSQL distribution that lets you run Oracle workloads on a fully open-source, community-driven database. Whether you're migrating from Oracle or starting fresh, this section will get you oriented fast.
+IvorySQL is an advanced, open-source PostgreSQL distribution with full Oracle compatibility. It is built and maintained by [Highgo Software](https://www.highgo.com) and is Apache-2.0 licensed — free to use, modify, and distribute forever.
 
-## What you'll find here
+The core promise: **run your Oracle workloads on PostgreSQL without rewriting your application**. IvorySQL speaks both dialects at once. You can connect an Oracle application on port 1521 and a native PostgreSQL tool on port 5432 — against the same running instance.
+
+<Callout type="info">
+IvorySQL tracks the latest PostgreSQL major release. IvorySQL 5.x is built on PostgreSQL 18 and is a direct, drop-in replacement for PostgreSQL 18.
+</Callout>
+
+## The dual-mode concept
+
+IvorySQL introduces a GUC parameter called `ivorysql.compatible_mode` with two values: `oracle` and `pg`.
+
+When you initialize a data directory you choose its baseline mode with the `-m` flag:
+
+- **`-m oracle`** (the default) — Oracle compatibility is active at startup. Every connection begins in Oracle mode. You can switch individual sessions to `pg` mode with `SET ivorysql.compatible_mode TO pg`.
+- **`-m pg`** — The cluster behaves like standard PostgreSQL. Oracle features are not available and the mode cannot be changed at runtime.
+
+This means a single IvorySQL cluster can serve Oracle-style applications and PostgreSQL-native applications at the same time, simply by choosing which port to connect on.
+
+## Who should use IvorySQL?
+
+| You are… | IvorySQL helps you… |
+|----------|-------------------|
+| Migrating from Oracle | Run your PL/SQL code and Oracle SQL directly — without a full rewrite |
+| Running a mixed fleet | Consolidate Oracle and PostgreSQL workloads on one open-source engine |
+| Building a new product | Start on PostgreSQL and use Oracle compatibility for specific features |
+| Needing a PostgreSQL replacement | IvorySQL is 100% compatible with the latest PostgreSQL and passes all PG regression tests |
+
+## What Oracle features are included?
+
+Oracle compatibility is delivered through a kernel-bound plugin called `ivorysql_ora`, which ships with the database and requires no manual installation.
+
+In Oracle mode, the following work out of the box:
+
+- **PL/iSQL** — Oracle PL/SQL syntax for functions, procedures, packages, anonymous blocks, and nested subfunctions
+- **Data types** — `NUMBER`, `VARCHAR2`, `DATE`, `CLOB`, `BLOB` and more
+- **Built-in functions** — `SYSDATE`, `TO_CHAR`, `TO_DATE`, `NVL`, `DECODE`, `TRUNC`, `SYS_GUID`, and others
+- **SQL syntax** — `SELECT … FROM dual`, `ROWNUM`, Oracle `LIKE` behavior, `CONNECT BY` hierarchical queries
+- **Schema objects** — Oracle-style sequences (`seq.NEXTVAL`), packages, invisible columns, force views
+- **Type attributes** — `%TYPE`, `%ROWTYPE`, OUT parameters, `CALL INTO`
+- **Character set** — GB18030 and NLS parameter support
+- **XML functions** — Oracle-compatible XML built-ins
+
+<Callout type="tip">
+Not sure whether to use Oracle mode or PG mode? See [Core Concepts](/docs/v5/getting-started/concepts) for a detailed comparison and guidance on which mode to choose.
+</Callout>
+
+## Key design decisions
+
+**Always compatible with upstream PostgreSQL.** IvorySQL never breaks PostgreSQL compatibility. Every Oracle feature is additive — you lose nothing by running IvorySQL instead of PostgreSQL.
+
+**Plugin-based extensibility.** Oracle-compatible features are delivered via `ivorysql_ora`, a plugin bound to the kernel. New compatibility features are added through this plugin without changing the core engine, making upgrades predictable.
+
+**Dual-port architecture.** IvorySQL listens on port 1521 (Oracle default) and port 5432 (PostgreSQL default) simultaneously. The port you connect on sets the default compatibility mode for that session, so existing Oracle connection strings work without reconfiguration.
+
+**Open source and community-driven.** The full source code — including all Oracle-compatible features — is published on [GitHub](https://github.com/IvorySQL/IvorySQL) under the Apache 2.0 license. The feature roadmap is shaped by the community.
+
+## Core application scenarios
+
+- **Enterprise systems** — ERP, financial platforms, and transaction-heavy workloads that need Oracle SQL and PL/SQL with PostgreSQL reliability and cost
+- **Location-based services** — PostGIS integration gives you geographic queries in SQL
+- **Data warehousing** — Rich data types and powerful aggregations for analytics workloads
+- **Oracle migration** — Migrate Oracle schemas and applications incrementally, without a big-bang cutover
+
+## Where to go next
 
 <Cards>
-  <Card href="/docs/v5/getting-started/quick-start" title="Quick Start" description="Get IvorySQL running in under 5 minutes." />
-  <Card href="/docs/v5/getting-started/concepts" title="Core Concepts" description="Understand dual-mode (PG/Oracle) compatibility." />
-  <Card href="/docs/v5/getting-started/release-notes" title="Release Notes" description="What's new in the latest version." />
+  <Card href="/docs/v5/getting-started/quick-start" title="Quick Start" description="Get a running IvorySQL instance in under 5 minutes on CentOS, Ubuntu, or Docker." />
+  <Card href="/docs/v5/getting-started/concepts" title="Core Concepts" description="Understand dual-mode architecture, dual-parser, PL/iSQL, and GUC parameters." />
+  <Card href="/docs/v5/getting-started/release-notes" title="Release Notes" description="What's new in IvorySQL 5.x and earlier versions." />
+  <Card href="/docs/v5/oracle-compatibility" title="Oracle Compatibility" description="Browse every Oracle-compatible feature by category." />
 </Cards>

@@ -90,6 +90,14 @@ initdb -D /usr/local/ivorysql/ivorysql-5/data
 pg_ctl -D /usr/local/ivorysql/ivorysql-5/data -l ivory.log start
 ```
 
+### Step 7: Connect to IvorySQL
+
+```bash
+psql -d ivorysql
+```
+
+You will see the `ivorysql=#` prompt. Type `\q` to exit.
+
 </Steps>
 
 ## Uninstallation

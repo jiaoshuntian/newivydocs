@@ -1,9 +1,9 @@
 ---
-title: Maintenance
+title: Routine Maintenance
 description: Keep your IvorySQL database healthy with routine vacuuming, autovacuum tuning, reindexing, log management, and high-availability strategies.
 ---
 
-# Maintenance
+# Routine Maintenance
 
 IvorySQL databases require periodic maintenance to stay performant and reliable. This page covers routine vacuuming (including the autovacuum daemon), preventing transaction ID wraparound, reindexing, log file management, and an overview of high-availability and replication strategies.
 
@@ -315,3 +315,222 @@ Key health indicator: WAL records generated on the primary but not yet applied o
 Replication slots ensure the primary does not remove WAL segments until all standbys have received them, and does not remove rows that could cause recovery conflicts.
 
 Slots can be physical (for streaming replication) or logical (for logical replication). They provide automated WAL retention management without needing to tune `wal_keep_size`.
+
+Create a physical replication slot:
+
+```sql
+SELECT * FROM pg_create_physical_replication_slot('node_a_slot');
+```
+
+Configure the standby to use the slot by setting `primary_slot_name` in `postgresql.conf`:
+
+```
+primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
+primary_slot_name = 'node_a_slot'
+```
+
+<Callout type="warn">
+Replication slots retain WAL segments until all consumers have received them. An inactive slot can cause `pg_wal` to fill up. Set `max_slot_wal_keep_size` to limit this risk.
+</Callout>
+
+#### Cascading Replication
+
+Cascading replication allows a standby server to accept replication connections and stream WAL records to other standbys, acting as a relay. This reduces the number of direct connections to the primary and minimizes inter-site bandwidth overhead.
+
+A standby acting as both receiver and sender is called a **cascading standby**. Standbys closer to the primary are *upstream servers*; those further away are *downstream servers*.
+
+Key properties of cascading replication:
+
+- Currently asynchronous -- synchronous replication settings have no effect on cascades
+- Hot standby feedback propagates upstream through all tiers
+- If an upstream standby is promoted, downstream servers follow the new primary when `recovery_target_timeline = 'latest'` (the default)
+
+To set up a cascading standby, configure it to accept replication connections (`max_wal_senders`, `hot_standby`, `pg_hba.conf`) and set `primary_conninfo` in the downstream standby to point to the cascading standby rather than the primary.
+
+### Synchronous Replication
+
+By default, IvorySQL streaming replication is **asynchronous** -- a small delay exists between committing on the primary and changes becoming visible on the standby. Synchronous replication eliminates this gap: each write transaction commit waits for confirmation that the commit record has been written to at least one synchronous standby.
+
+The only scenario where data committed on the primary can still be lost is if both the primary and standby crash simultaneously.
+
+<Callout type="info">
+Read-only transactions, rollbacks, and subtransaction commits do not wait for standby confirmation. Only top-level write commits wait.
+</Callout>
+
+#### Basic Configuration
+
+<Steps>
+
+#### Step 1: Configure streaming replication
+
+Ensure streaming replication is already working between primary and standby.
+
+#### Step 2: Set synchronous_standby_names on the primary
+
+```
+# postgresql.conf on primary
+synchronous_standby_names = 'FIRST 1 (standby1)'
+synchronous_commit = on   # default; explicit here for clarity
+```
+
+#### Step 3: Reload the primary configuration
+
+```bash
+pg_ctl reload
+```
+
+</Steps>
+
+After configuration, each write commit waits for the standby named `standby1` to confirm it has written the commit record to durable storage.
+
+#### Multiple Synchronous Standbys
+
+Two selection methods are available:
+
+**Priority-based (`FIRST n`):** Transactions wait for the first `n` standbys in priority order:
+
+```
+synchronous_standby_names = 'FIRST 2 (s1, s2, s3)'
+```
+
+`s1` and `s2` are synchronous standbys; `s3` takes over if either fails. `s4` (if running but not listed) is always asynchronous.
+
+**Quorum-based (`ANY n`):** Transactions wait for any `n` of the listed standbys:
+
+```
+synchronous_standby_names = 'ANY 2 (s1, s2, s3)'
+```
+
+Any two of `s1`, `s2`, `s3` must confirm before commit completes.
+
+#### Synchronous Commit Levels
+
+| `synchronous_commit` value | What the standby must confirm |
+|----------------------------|-------------------------------|
+| `on` (default) | WAL flushed to disk |
+| `remote_write` | WAL received and written to OS buffer (not necessarily flushed) |
+| `remote_apply` | Transaction replayed and visible to queries on standby |
+| `local` | Only local WAL flush; standby not consulted |
+| `off` | Return immediately; no durability guarantee |
+
+<Callout type="warn">
+If all synchronous standbys are unavailable, commits will block indefinitely. To recover, set `synchronous_standby_names = ''` and reload, or ensure at least one standby reconnects.
+</Callout>
+
+### Failover
+
+If the primary server fails, the standby should begin failover procedures.
+
+To trigger failover of a log-shipping standby:
+
+```bash
+# Promote the standby to primary
+pg_ctl promote -D /path/to/standby/data
+
+# Or call the SQL function
+SELECT pg_promote();
+```
+
+After promotion, the old standby becomes the new primary. To return to full high-availability operation, a new standby must be created (using the new primary as source).
+
+<Callout type="info">
+Use `pg_rewind` to resynchronize the old primary after it recovers, instead of performing a full base backup. This is significantly faster for large databases.
+</Callout>
+
+**STONITH (Shoot The Other Node In The Head):** When using a two-server setup, ensure a mechanism exists to prevent the old primary from resuming activity after failover. Split-brain (two servers both believing they are primary) causes data divergence and corruption.
+
+After failover there is only a single server -- a *degenerate state*. Regular drills that test the failover procedure and verify that promotion works correctly are strongly recommended.
+
+### Hot Standby
+
+Hot standby is the ability to connect to a standby server and run **read-only queries** while it is in recovery or standby mode.
+
+#### Enabling Hot Standby
+
+Set `hot_standby = on` in the standby's `postgresql.conf` (this is the default). The server will begin accepting read-only connections once it reaches a consistent state during recovery.
+
+Confirmation in server logs:
+
+```
+LOG:  entering standby mode
+LOG:  consistent recovery state reached
+LOG:  database system is ready to accept read-only connections
+```
+
+Check whether hot standby is active in your session:
+
+```sql
+SHOW in_hot_standby;
+```
+
+#### Permitted Operations
+
+During hot standby, the following are allowed:
+
+- `SELECT`, `COPY TO`
+- Cursor operations: `DECLARE`, `FETCH`, `CLOSE`
+- `SHOW`, `SET`, `RESET`
+- Transaction control: `BEGIN`, `END`, `SAVEPOINT`, `ROLLBACK TO SAVEPOINT`
+- `LOCK TABLE` in `ACCESS SHARE`, `ROW SHARE`, or `ROW EXCLUSIVE` mode
+- `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DISCARD`
+
+The following generate errors:
+
+- All DML: `INSERT`, `UPDATE`, `DELETE`, `COPY FROM`, `TRUNCATE`
+- All DDL: `CREATE`, `DROP`, `ALTER`
+- `SELECT ... FOR UPDATE / FOR SHARE`
+- `LOCK` requesting modes above `ROW EXCLUSIVE`
+- `PREPARE TRANSACTION`, `COMMIT PREPARED`, `ROLLBACK PREPARED`
+- Sequence operations: `nextval()`, `setval()`
+
+#### Handling Query Conflicts
+
+Actions on the primary can conflict with queries running on the standby. Hard conflicts require query cancellation or session termination:
+
+| Conflict type | Cause |
+|---------------|-------|
+| Lock conflict | `ACCESS EXCLUSIVE` lock taken on primary (DDL, explicit `LOCK`) |
+| Tablespace drop | Primary drops a tablespace used by the standby for temp files |
+| Database drop | Primary drops a database a standby session is connected to |
+| Vacuum cleanup | Vacuum removes rows still visible to a standby snapshot |
+| Page access | Vacuum targets a page being accessed by a standby query |
+
+Two parameters control how long WAL replay waits before forcibly canceling conflicting standby queries:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `max_standby_archive_delay` | 30s | Max delay when reading WAL from archive |
+| `max_standby_streaming_delay` | 30s | Max delay when reading streaming WAL |
+
+Setting either to `-1` means wait forever (useful for decision-support standbys). Setting to `0` cancels conflicting queries immediately (useful for HA standbys).
+
+<Callout type="tip">
+To reduce conflicts caused by vacuum cleanup, set `hot_standby_feedback = on` on the standby. This prevents the primary from vacuuming rows still visible on the standby, at the cost of slightly delayed cleanup on the primary.
+</Callout>
+
+Monitor conflict statistics on the standby:
+
+```sql
+SELECT * FROM pg_stat_database_conflicts;
+```
+
+#### Standby Configuration Requirements
+
+The standby's shared memory parameters must be equal to or larger than the primary's. If a standby receives WAL indicating the primary increased a parameter beyond the standby's current value, recovery pauses with a warning:
+
+```
+WARNING:  hot standby is not possible because of insufficient parameter settings
+DETAIL:  max_connections = 80 is a lower setting than on the primary server, where its value was 100.
+```
+
+Parameters that must be kept in sync:
+
+- `max_connections`
+- `max_prepared_transactions`
+- `max_locks_per_transaction`
+- `max_wal_senders`
+- `max_worker_processes`
+
+<Callout type="info">
+When increasing these values, update standbys first, then the primary. When decreasing, update the primary first, then standbys.
+</Callout>

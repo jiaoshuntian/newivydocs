@@ -122,4 +122,49 @@ ora_outermost_pl_block: ora_decl_sect K_BEGIN proc_sect exception_sect K_END opt
 ;
 ```
 
-The `ora_decl_sect` production handles both the presence and absence of the `DECLARE` keyword, pushing/popping the namespace and initializing variables as needed.
+The `ora_decl_sect` production handles both the presence and absence of the `DECLARE` keyword:
+
+```
+ora_decl_sect: opt_block_label opt_ora_decl_start opt_ora_decl_stmts
+    {
+        if ($2) {
+            if ($1 == NULL) {
+                plisql_ns_push(NULL, PLISQL_LABEL_BLOCK);
+            }
+        }
+    }
+    opt_ora_decl_stmts
+    {
+        if ($4) {
+            plisql_IdentifierLookup = IDENTIFIER_LOOKUP_NORMAL;
+            $$.label = ($1 == NULL ? plisql_curr_compile->namelabel : $1);
+            if ($2 && $1 == NULL) $$.popname = true;
+            else $$.popname = false;
+            $$.n_initvars = plisql_add_initdatums(&($$.initvarnos));
+        } else {
+            plisql_IdentifierLookup = IDENTIFIER_LOOKUP_NORMAL;
+            $$.label = ($1 == NULL ? plisql_curr_compile->namelabel : $1);
+            $$.n_initvars = 0;
+            if ($2 && $1 == NULL) $$.popname = true;
+            else $$.popname = false;
+            $$.initvarnos = NULL;
+        }
+    }
+;
+
+opt_ora_decl_start: K_DECLARE
+    {
+        plisql_add_initdatums(NULL);
+        plisql_IdentifierLookup = IDENTIFIER_LOOKUP_DECLARE;
+        $$ = true;
+    }
+  | /*EMPTY*/
+    {
+        plisql_add_initdatums(NULL);
+        plisql_IdentifierLookup = IDENTIFIER_LOOKUP_DECLARE;
+        $$ = false;
+    }
+;
+```
+
+When `opt_ora_decl_start` matches `K_DECLARE`, the scanner mode switches to `IDENTIFIER_LOOKUP_DECLARE` to handle the declaration section, and `$$ = true` signals that `DECLARE` was present. When `opt_ora_decl_start` is empty, Oracle's implicit declaration section behavior is enabled — the block starts without `DECLARE` and jumps straight to `BEGIN`.

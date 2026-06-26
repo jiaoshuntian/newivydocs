@@ -88,4 +88,61 @@ Expected output:
 
 ## Usage
 
-For detailed usage instructions, refer to the [PGroonga official documentation](https://pgroonga.github.io/tutorial).
+### Create a Table and PGroonga Index
+
+```sql
+CREATE TABLE articles (
+    id      serial PRIMARY KEY,
+    title   text NOT NULL,
+    content text NOT NULL
+);
+
+-- Create a PGroonga index covering both columns
+CREATE INDEX pgroonga_articles_idx
+    ON articles
+ USING pgroonga (title, content);
+```
+
+### Insert Multilingual Content
+
+```sql
+INSERT INTO articles (title, content) VALUES
+    ('PostgreSQL Introduction', 'PostgreSQL is a powerful open-source database.'),
+    ('IvorySQL Overview', 'IvorySQL is Oracle-compatible and built on PostgreSQL.'),
+    ('数据库简介', '数据库是存储和管理数据的系统。'),
+    ('全文搜索', 'PGroonga 支持中文、日文、韩文等多语言全文搜索。');
+```
+
+### Full-Text Search with the `&@~` Operator
+
+```sql
+-- Search in English
+SELECT id, title FROM articles WHERE content &@~ 'open-source database';
+
+-- Search in Chinese
+SELECT id, title FROM articles WHERE content &@~ '多语言';
+```
+
+```
+ id |    title
+----+----------
+  4 | 全文搜索
+(1 row)
+```
+
+### Ranked Search Results
+
+```sql
+SELECT id, title, pgroonga_score(tableoid, ctid) AS score
+FROM articles
+WHERE title &@~ 'IvorySQL OR PostgreSQL'
+ORDER BY score DESC;
+```
+
+<Callout type="info">
+PGroonga indexes are not transactional in the same way as standard PostgreSQL indexes. After bulk inserts, run `SELECT pgroonga_command('io_flush')` to ensure all data is flushed to the Groonga storage.
+</Callout>
+
+## Further Reading
+
+For the full operator reference and advanced configuration, refer to the [PGroonga official documentation](https://pgroonga.github.io/tutorial).

@@ -8,7 +8,7 @@ description: Run IvorySQL in a single container using Docker or Podman.
 The quickest way to run IvorySQL without a package install. Both Docker and Podman are supported with the same image.
 
 <Callout type="tip">
-Need a high-availability setup with multiple nodes? See [Docker Swarm & Compose](/docs/v5/deploy/docker-swarm) or [Kubernetes](/docs/v5/deploy/kubernetes).
+Need a high-availability setup with multiple nodes? See [Docker Swarm & Compose](/docs/v5/cloud-service/docker-swarm) or [Kubernetes](/docs/v5/cloud-service/kubernetes).
 </Callout>
 
 ## Docker
@@ -97,6 +97,15 @@ Then inside the container:
 psql -d ivorysql
 ```
 
+Verify the version:
+
+```sql
+SELECT version();
+--                                                         version
+-- -----------------------------------------------------------------------------------------------------------------------
+--  PostgreSQL 18.0 (IvorySQL 5.0) on x86_64-pc-linux-gnu, compiled by gcc (GCC) 8.5.0 20210514 (Red Hat 8.5.0-28), 64-bit
+```
+
 </Steps>
 
 ## Ports
@@ -119,7 +128,7 @@ docker run --name ivorysql \
 ## Next steps
 
 <Cards>
-  <Card href="/docs/v5/deploy/docker-swarm" title="Docker Swarm & Compose" description="Deploy a multi-node HA cluster with etcd and Patroni." />
-  <Card href="/docs/v5/deploy/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a single pod or a Patroni-managed HA cluster." />
-  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters on Kubernetes with a custom operator." />
+  <Card href="/docs/v5/cloud-service/docker-swarm" title="Docker Swarm & Compose" description="Deploy a multi-node HA cluster with etcd and Patroni." />
+  <Card href="/docs/v5/cloud-service/kubernetes" title="Kubernetes" description="Run IvorySQL on K8s as a single pod or a Patroni-managed HA cluster." />
+  <Card href="/docs/v5/cloud-service/operator" title="IvorySQL Operator" description="Manage IvorySQL clusters on Kubernetes with a custom operator." />
 </Cards>

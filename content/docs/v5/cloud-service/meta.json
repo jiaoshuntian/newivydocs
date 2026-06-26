@@ -1,4 +1,14 @@
 {
   "title": "Cloud Service",
-  "pages": ["index", "installation", "usage"]
+  "pages": [
+    "---Containers---",
+    "docker-podman",
+    "docker-swarm",
+    "---Kubernetes---",
+    "kubernetes",
+    "operator",
+    "---IvorySQL Cloud---",
+    "installation",
+    "usage"
+  ]
 }

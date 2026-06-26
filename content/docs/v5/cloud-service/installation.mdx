@@ -12,7 +12,7 @@ This guide walks through deploying every component of the IvorySQL Cloud platfor
 Before you begin:
 
 - A Kubernetes cluster (≥ 1.23) with a default storage class
-- `ivory-operator` installed — see [IvorySQL Operator](/docs/v5/deploy/operator)
+- `ivory-operator` installed — see [IvorySQL Operator](/docs/v5/cloud-service/operator)
 - A running PostgreSQL-compatible database for the backend (IvorySQL, HighGo DB, or PostgreSQL)
 - Java 1.8 on the application server
 - Node.js and npm for building the frontend
@@ -36,6 +36,7 @@ Pre-load these images on every Kubernetes node if your servers don't have direct
 docker.io/ivorysql/ivory-operator:v5.0-latest
 docker.io/ivorysql/pgadmin:ubi8-9.9-5.0-1
 docker.io/ivorysql/pgbackrest:ubi8-2.56.0-5.0-1
+docker.io/ivorysql/pgbouncer:ubi8-1.23.0-5.0-1
 docker.io/ivorysql/postgres-exporter:ubi8-0.17.0-5.0-1
 docker.io/ivorysql/ivorysql:ubi8-5.0-5.0-1
 docker.io/prom/prometheus:v2.33.5
@@ -224,7 +225,7 @@ kubectl apply -k examples/kustomize/install/namespace
 kubectl apply --server-side -k examples/kustomize/install/default
 ```
 
-See the [IvorySQL Operator guide](/docs/v5/deploy/operator) for full documentation.
+See the [IvorySQL Operator guide](/docs/v5/cloud-service/operator) for full documentation.
 
 ---
 
@@ -236,5 +237,5 @@ You should see the IvorySQL Cloud login page. Log in with the `admin` user to ac
 
 <Cards>
   <Card href="/docs/v5/cloud-service/usage" title="User Guide" description="Provision databases, manage clusters, run backups, and monitor from the web UI." />
-  <Card href="/docs/v5/deploy/operator" title="IvorySQL Operator" description="Understand the operator that powers IvorySQL Cloud." />
+  <Card href="/docs/v5/cloud-service/operator" title="IvorySQL Operator" description="Understand the operator that powers IvorySQL Cloud." />
 </Cards>

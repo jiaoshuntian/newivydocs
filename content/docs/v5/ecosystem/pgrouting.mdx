@@ -71,4 +71,68 @@ Expected output:
 
 ## Usage
 
-For detailed usage instructions, refer to the [pgRouting official documentation](https://docs.pgrouting.org/).
+pgRouting works on road network data stored as a table of edges. Each edge needs at minimum a unique ID, a source node, a target node, and a cost.
+
+### Create a Road Network Table
+
+```sql
+CREATE TABLE roads (
+    id     bigserial PRIMARY KEY,
+    source integer,
+    target integer,
+    cost   float
+);
+
+INSERT INTO roads (source, target, cost) VALUES
+    (1, 2, 1.0),
+    (2, 3, 2.0),
+    (3, 4, 1.5),
+    (1, 4, 5.0);
+```
+
+### Shortest Path (Dijkstra)
+
+Find the shortest path between node 1 and node 4:
+
+```sql
+SELECT seq, node, edge, cost, agg_cost
+FROM pgr_dijkstra(
+    'SELECT id, source, target, cost FROM roads',
+    1,    -- start node
+    4     -- end node
+);
+```
+
+Expected output:
+
+```
+ seq | node | edge | cost | agg_cost
+-----+------+------+------+----------
+   1 |    1 |    1 |    1 |        0
+   2 |    2 |    2 |    2 |        1
+   3 |    3 |    3 |  1.5 |        3
+   4 |    4 |   -1 |    0 |      4.5
+(4 rows)
+```
+
+### Traveling Salesman Problem (TSP)
+
+Find an efficient route visiting a set of nodes:
+
+```sql
+SELECT seq, node
+FROM pgr_TSP(
+    $$SELECT * FROM pgr_dijkstraCostMatrix(
+        'SELECT id, source, target, cost FROM roads',
+        ARRAY[1, 2, 3, 4]
+    )$$
+);
+```
+
+<Callout type="info">
+Most pgRouting functions require PostGIS to be installed for spatial geometry support. Install PostGIS first if you plan to use geographic coordinate systems. See the [PostGIS](/docs/v5/ecosystem/postgis) guide for setup instructions.
+</Callout>
+
+## Further Reading
+
+For the full function reference including OSRM integration, K-Shortest Paths, and Service Areas, refer to the [pgRouting official documentation](https://docs.pgrouting.org/).

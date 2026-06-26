@@ -9,35 +9,44 @@ Anonymous blocks let you write and execute PL/iSQL procedural code on the fly, w
 
 ## How It Works
 
-An anonymous block is parsed and executed immediately by the server. It goes through the client tool (psql), the frontend, and the backend — just like any other statement — but unlike a function or procedure, it is not persisted in the system directory.
+An anonymous block is parsed and executed immediately by the server. Unlike a stored function or procedure, it is not persisted in the system directory. IvorySQL is compatible with Oracle's anonymous block syntax format, with support spanning the client tool (psql), the frontend parser, and the backend executor.
 
 ## Syntax
 
-Use the `DO` command with a dollar-quoted string, terminated with a forward slash (`/`):
+Oracle-style anonymous blocks use the `DECLARE ... BEGIN ... END;` structure, terminated by a forward slash (`/`) on its own line in psql:
 
 ```sql
-DO $$
 DECLARE
   -- variable declarations
 BEGIN
   -- executable statements
 END;
-$$ LANGUAGE plisql;
 /
 ```
+
+The `DECLARE` section is optional. If there are no variable declarations, you can start directly with `BEGIN`:
+
+```sql
+BEGIN
+  -- executable statements
+END;
+/
+```
+
+<Callout type="info">
+  The forward slash (`/`) on its own line is the Oracle-style statement terminator in psql. It signals the end of the anonymous block and triggers execution.
+</Callout>
 
 ## Examples
 
 ### Simple anonymous block
 
 ```sql
-DO $$
 DECLARE
   i integer := 10;
 BEGIN
   RAISE NOTICE '%', i;
 END;
-$$ LANGUAGE plisql;
 /
 -- NOTICE:  10
 ```
@@ -45,7 +54,6 @@ $$ LANGUAGE plisql;
 ### Block with CASE and exception handling
 
 ```sql
-DO $$
 DECLARE
   grade CHAR(1);
 BEGIN
@@ -58,7 +66,40 @@ EXCEPTION
   WHEN CASE_NOT_FOUND THEN
     RAISE NOTICE 'No such grade';
 END;
-$$ LANGUAGE plisql;
 /
 -- NOTICE:  Very Good
 ```
+
+### Block with a loop
+
+```sql
+DECLARE
+  total integer := 0;
+BEGIN
+  FOR i IN 1..5 LOOP
+    total := total + i;
+  END LOOP;
+  RAISE NOTICE 'Sum = %', total;
+END;
+/
+-- NOTICE:  Sum = 15
+```
+
+### Block that queries data
+
+```sql
+DECLARE
+  emp_name varchar(100);
+BEGIN
+  SELECT first_name INTO emp_name FROM employees WHERE employee_id = 1;
+  RAISE NOTICE 'Employee: %', emp_name;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RAISE NOTICE 'No employee found';
+END;
+/
+```
+
+<Callout type="tip">
+  Anonymous blocks support the full PL/iSQL feature set: variables, cursors, loops, conditional logic, exception handling, and calls to stored procedures and functions.
+</Callout>

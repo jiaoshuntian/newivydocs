@@ -1,0 +1,95 @@
+---
+title: GUC Framework
+description: How IvorySQL extends PostgreSQL's GUC system to register Oracle-compatibility parameters in a single unified file (ivy_guc.c).
+---
+
+# GUC Framework
+
+IvorySQL adds Oracle-compatibility behavior through a set of new GUC (Grand Unified Configuration) parameters. To keep Oracle-specific configuration isolated from the PostgreSQL kernel, all compatibility GUC parameters are registered in a single file: **`src/backend/utils/misc/ivy_guc.c`**.
+
+## Design Goal
+
+PostgreSQL's upstream GUC machinery spreads parameter registrations across many files. Adding Oracle-compatible parameters directly would scatter Oracle-specific code throughout the kernel, making upgrades harder and the compatibility layer opaque.
+
+The solution: a dedicated `ivy_guc.c` that appends Oracle parameters to the GUC tables after PostgreSQL's own parameters are loaded. New compatibility parameters are added here — no changes to upstream files are required.
+
+## The Five Parameter Arrays
+
+`ivy_guc.c` defines five typed arrays, mirroring the PostgreSQL GUC API:
+
+| Array | Parameter Type |
+|-------|---------------|
+| `Ivy_ConfigureNamesBool` | Boolean (`on` / `off`) |
+| `Ivy_ConfigureNamesInt` | Integer |
+| `Ivy_ConfigureNamesString` | String |
+| `Ivy_ConfigureNamesReal` | Floating-point |
+| `Ivy_ConfigureNamesEnum` | Enum (named constants) |
+
+To add a new Oracle-compatibility GUC, append an entry to the appropriate array. No other files need to change.
+
+## Current GUC Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ivorysql.compatible_mode` | Active SQL dialect for this session (`pg` or `oracle`). Changed with `SET`; `RESET`/`RESET ALL` reverts to the connection-time value. |
+| `ivorysql.database_mode` | Cluster initialization mode (`pg` or `oracle`). **Read-only** — `SET`/`RESET` have no effect. |
+| `ivorysql.datetime_ignore_nls_mask` | Bitmask (0–15) controlling which date/time types skip NLS format processing. Default: `0`. |
+| `ivorysql.enable_emptystring_to_NULL` | When `on`, empty string literals are stored as `NULL`. |
+| `ivorysql.identifier_case_switch` | Quoted identifier case conversion mode. |
+| `ivorysql.listen_address` | Listener address for Oracle-compatible connections. Read from `ivorysql.conf` at init; requires restart. |
+| `ivorysql.port` | Port for Oracle-compatible connections. Read from `ivorysql.conf` at init; requires restart. |
+| `nls_date_format` | Default `DATE` display/parse format. Default: `'YYYY-MM-DD'`. |
+| `nls_length_semantics` | Character size unit for `CHAR`/`VARCHAR`/`VARCHAR2` (`BYTE` or `CHAR`). |
+| `nls_timestamp_format` | Default `TIMESTAMP` format string. |
+| `nls_timestamp_tz_format` | Default `TIMESTAMP WITH TIME ZONE` format string. |
+| `shared_preload_libraries` | Read from `ivorysql.conf` at startup; requires restart. |
+
+## `datetime_ignore_nls_mask` Bitmask
+
+Each bit suppresses NLS formatting for one date/time type. The lower four bits map to:
+
+| Bit | Type suppressed |
+|-----|----------------|
+| `0x01` (1) | `DATE` |
+| `0x02` (2) | `TIMESTAMP` |
+| `0x04` (4) | `TIMESTAMP WITH TIME ZONE` |
+| `0x08` (8) | `TIMESTAMP WITH LOCAL TIME ZONE` |
+
+Setting the mask to `15` disables NLS formatting for all date/time types, reverting to standard PostgreSQL behavior.
+
+### Example
+
+```sql
+SET ivorysql.compatible_mode TO oracle;
+
+-- Default: NLS formatting active for all date types
+SHOW nls_date_format;
+--  nls_date_format
+-- -----------------
+--  YYYY-MM-DD
+
+SHOW ivorysql.datetime_ignore_nls_mask;
+--  ivorysql.datetime_ignore_nls_mask
+-- -----------------------------------
+--  0
+
+CREATE TABLE test_nls_date (a int, created_at date);
+
+-- Insert succeeds — NLS parser accepts YYYY/MM/DD
+INSERT INTO test_nls_date VALUES (1, '2024/04/05');
+
+-- Change format and insert again
+SET nls_date_format TO 'yy-mm-dd';
+INSERT INTO test_nls_date VALUES (2, '24/04/15');
+
+-- Suppress NLS for DATE (bit 1)
+SET ivorysql.datetime_ignore_nls_mask TO 1;
+
+-- Now fails — DATE no longer goes through NLS parser
+INSERT INTO test_nls_date VALUES (3, '24/05/15');
+-- ERROR: date/time field value out of range: "24/05/15"
+```
+
+<Callout type="info">
+`datetime_ignore_nls_mask` only affects how string literals are **parsed** into date/time values on insert. It does not change how existing values are displayed in `SELECT` results.
+</Callout>

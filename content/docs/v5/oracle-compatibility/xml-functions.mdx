@@ -114,6 +114,9 @@ SELECT insertxmlbefore(
   '/a/b',
   XMLType('<c>88</c>')
 ) FROM dual;
+--                  insertxmlbefore
+-- --------------------------------------------------
+--  <a>222<c>88</c><b>100</b><c>88</c><b>200</b></a>
 ```
 
 ### insertxmlafter
@@ -124,6 +127,66 @@ SELECT insertxmlafter(
   '/a/b',
   XMLType('<c>88</c>')
 ) FROM dual;
+--  insertxmlafter
+-- ----------------
+--  <a>
+--    <b>100</b>
+--    <c>88</c>
+--  </a>
+```
+
+### insertchildxml
+
+Inserts child nodes into a specified XML path by attribute or element name:
+
+```sql
+SELECT insertchildxml(
+  XMLType('<a>one<b></b>three<b></b></a>'),
+  '//b',
+  'name',
+  XMLType('<name>newnode</name>')
+) FROM dual;
+--                             insertchildxml
+-- -----------------------------------------------------------------------
+--  <a>one<b><name>newnode</name></b>three<b><name>newnode</name></b></a>
+```
+
+### insertchildxmlbefore
+
+Inserts child nodes before a named child element at a specified path:
+
+```sql
+SELECT insertchildxmlbefore(
+  XMLType('<a><b>100</b></a>'),
+  '/a',
+  'b',
+  XMLType('<c>88</c>')
+) FROM dual;
+--  insertchildxmlbefore
+-- ----------------------
+--  <a>
+--    <c>88</c>
+--    <b>100</b>
+--  </a>
+```
+
+### insertchildxmlafter
+
+Inserts child nodes after a named child element at a specified path:
+
+```sql
+SELECT insertchildxmlafter(
+  XMLType('<a><b>100</b></a>'),
+  '/a',
+  'b',
+  XMLType('<c>88</c>')
+) FROM dual;
+--  insertchildxmlafter
+-- ---------------------
+--  <a>
+--    <b>100</b>
+--    <c>88</c>
+--  </a>
 ```
 
 ### xmlisvalid

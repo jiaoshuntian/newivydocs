@@ -1,0 +1,91 @@
+---
+title: Empty String to NULL Implementation
+description: Lexical analysis-time conversion of empty strings to NULL values via GUC parameter for Oracle-compatible empty string handling.
+---
+
+# Empty String to NULL Implementation
+
+In Oracle databases, empty strings (`''`) are treated as `NULL` values. This is a well-known Oracle behavior that differs from standard SQL and PostgreSQL, where `''` is a valid zero-length string distinct from `NULL`.
+
+To maintain compatibility with this Oracle behavior, IvorySQL provides the empty string to NULL conversion feature. When enabled, empty strings in SQL statements are automatically converted to `NULL` values during lexical analysis — before any grammar rules are applied.
+
+## GUC Parameter
+
+```sql
+-- Enable empty string to NULL conversion (Oracle mode default)
+SET ivorysql.enable_emptystring_to_NULL = on;
+
+-- Check the current setting
+SHOW ivorysql.enable_emptystring_to_NULL;
+```
+
+The parameter `ivorysql.enable_emptystring_to_NULL` corresponds to the internal GUC variable `enable_emptystring_to_NULL`.
+
+## Lexical Analysis
+
+The conversion happens at the earliest possible stage — in the lexical scanner `ora_scan.l`, before the parser sees the token. This means the grammar layer never needs to know whether `NULL_P` originated from an explicit `NULL` keyword or from an empty string:
+
+```c
+case xe:
+    yylval->str = litbufdup(yyscanner);
+    if (strcmp(yylval->str, "") == 0 &&
+        ORA_PARSER == compatible_db &&
+        enable_emptystring_to_NULL)
+    {
+        return NULL_P;
+    }
+    return SCONST;
+```
+
+Here `xe` represents extended quoted strings (strings enclosed in quotes that support backslash escape sequences). The conversion fires only when all three conditions are true:
+
+1. During lexical analysis, an empty string (`""`) is encountered.
+2. The Oracle parser is active (`ORA_PARSER == compatible_db`).
+3. The GUC parameter `enable_emptystring_to_NULL` is enabled.
+
+When all three conditions hold, the scanner returns `NULL_P` instead of `SCONST`. If any condition is false, the scanner returns `SCONST` (a string constant token).
+
+## Grammar Analysis
+
+In `ora_gram.y`, the statement `insert into abc values('');` is parsed through the following grammar chain:
+
+```
+values_clause: VALUES '(' expr_list ')'
+expr_list:     a_expr
+a_expr:        c_expr
+c_expr:        AexprConst
+AexprConst:    Sconst { $$ = makeStringConst($1, @1); }
+           |   NULL_P { $$ = makeNullAConst(@1); }
+```
+
+Because `NULL_P` and `Sconst` are handled by separate productions in `AexprConst`, the grammar constructs the correct AST node:
+
+- `SCONST` token → `makeStringConst()` → string constant node
+- `NULL_P` token → `makeNullAConst()` → null constant node
+
+The parser is entirely agnostic to the origin of the `NULL_P` token. Whether it came from the literal keyword `NULL` or from an empty string `''` depends solely on what the lexer returned, which is controlled by the GUC.
+
+## Behavioral Example
+
+```sql
+SET ivorysql.enable_emptystring_to_NULL = on;
+
+CREATE TABLE t (col VARCHAR2(10));
+
+-- With conversion enabled, '' is treated as NULL
+INSERT INTO t VALUES ('');
+SELECT col IS NULL FROM t;  -- returns TRUE
+
+SET ivorysql.enable_emptystring_to_NULL = off;
+
+-- With conversion disabled, '' is a zero-length string
+INSERT INTO t VALUES ('');
+SELECT col IS NULL FROM t;  -- returns FALSE (empty string, not NULL)
+```
+
+## Design Decision: Lexical vs. Grammar Stage
+
+The conversion is implemented at the lexical stage (rather than in grammar rules or a semantic analysis pass) for two reasons:
+
+1. **Simplicity** — A single check in the scanner handles all contexts where empty string literals can appear, without needing to enumerate every grammar production.
+2. **Correctness** — Downstream grammar rules already know how to handle `NULL_P` (it is a standard PostgreSQL token), so no grammar changes are required.

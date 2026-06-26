@@ -71,4 +71,69 @@ Expected output:
 
 ## Usage
 
-For detailed usage instructions, refer to the [pgsql-http official documentation](https://github.com/pramsey/pgsql-http).
+### GET Request
+
+Fetch data from an external URL and access the response:
+
+```sql
+SELECT content
+FROM http_get('https://httpbin.org/get');
+```
+
+The response is returned as a `http_response` composite type with fields: `status`, `content_type`, `headers`, and `content`.
+
+```sql
+SELECT status, content_type, content::json
+FROM http_get('https://httpbin.org/get');
+```
+
+### POST Request with JSON
+
+Send a JSON payload to an external API:
+
+```sql
+SELECT status, content
+FROM http_post(
+    'https://httpbin.org/post',
+    '{"key": "value"}',
+    'application/json'
+);
+```
+
+### Setting Custom Headers
+
+Use `http_header` to attach custom headers (for example, an Authorization token):
+
+```sql
+SELECT status, content
+FROM http((
+    'GET',
+    'https://httpbin.org/bearer',
+    ARRAY[http_header('Authorization', 'Bearer my-token')],
+    NULL,
+    NULL
+)::http_request);
+```
+
+### Store External Data in a Table
+
+Retrieve JSON from an external API and insert selected fields into a table:
+
+```sql
+CREATE TABLE exchange_rates (
+    fetched_at timestamptz DEFAULT now(),
+    rate       numeric
+);
+
+INSERT INTO exchange_rates (rate)
+SELECT (content::json->>'rate')::numeric
+FROM http_get('https://api.example.com/rates/usd');
+```
+
+<Callout type="info">
+pgsql-http runs HTTP requests synchronously inside the transaction. For high-frequency use, consider calling it from a background worker or via pg_cron to avoid blocking client connections.
+</Callout>
+
+## Further Reading
+
+For the full function reference and advanced options, see the [pgsql-http official documentation](https://github.com/pramsey/pgsql-http).

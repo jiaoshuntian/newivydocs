@@ -5,9 +5,13 @@ description: Generate unique 16-byte identifiers using Oracle-compatible SYS_GUI
 
 # SYS_GUID
 
-`sys_guid()` generates a 16-byte, database-level unique identifier (raw value). It is Oracle's equivalent of a GUID/UUID generator.
+`sys_guid()` generates a 16-byte, database-level unique identifier (raw value). It is Oracle's equivalent of a GUID/UUID generator, ensuring uniqueness across all rows in the database.
 
-## Usage
+## Return Type
+
+`sys_guid()` returns a `raw(16)` value — a 16-byte binary sequence represented as a hexadecimal string. Each call generates a new random, globally unique value.
+
+## Basic Usage
 
 ```sql
 SELECT sys_guid() FROM dual;
@@ -16,9 +20,18 @@ SELECT sys_guid() FROM dual;
 --  \x3ed9426c8a093442a38bea09a74f44a1
 ```
 
+Each call returns a different value:
+
+```sql
+SELECT sys_guid() AS id1, sys_guid() AS id2 FROM dual;
+--  id1                                | id2
+-- ------------------------------------+------------------------------------
+--  \x7a2b...                          | \xc4f1...
+```
+
 ## Using as a Primary Key Default
 
-You can use `sys_guid()` as the default value for a primary key column:
+`sys_guid()` is commonly used as the default value for a primary key column, eliminating the need for sequences or serial columns:
 
 ```sql
 CREATE TABLE student (
@@ -31,5 +44,26 @@ When inserting new rows, the primary key is automatically populated:
 
 ```sql
 INSERT INTO student(student_name) VALUES ('Steven');
--- student_id is set automatically by sys_guid()
+INSERT INTO student(student_name) VALUES ('Alice');
+
+SELECT student_id, student_name FROM student;
+--  student_id                         | student_name
+-- ------------------------------------+--------------
+--  \x3ed9426c8a093442a38bea09a74f44a1 | Steven
+--  \x8f21a3b0c9d4e5f6a7b8c9d0e1f2a3b4 | Alice
 ```
+
+<Callout type="tip">
+  Because `sys_guid()` generates a random value for each row automatically, you never need to specify the primary key column explicitly in an `INSERT` statement.
+</Callout>
+
+## Comparison with PostgreSQL UUID
+
+In PostgreSQL, the equivalent is `gen_random_uuid()` (from the `pgcrypto` extension), which returns a UUID type. `sys_guid()` is the Oracle-compatible counterpart that returns a `raw(16)` value.
+
+| Feature | `sys_guid()` | `gen_random_uuid()` |
+|---|---|---|
+| Return type | `raw(16)` | `uuid` |
+| Format | 16-byte hex | UUID with dashes |
+| Compatibility | Oracle | PostgreSQL |
+| Uniqueness | Global | Global |
