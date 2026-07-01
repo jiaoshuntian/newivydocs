@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { LifeBuoy, FlaskConical, Pencil } from 'lucide-react';
+import { i18n } from '@/lib/i18n';
 
 interface SectionCard {
   href: string;
@@ -80,7 +81,10 @@ const sectionGroups: SectionGroup[] = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage({ params }: PageProps<'/[lang]'>) {
+  const { lang } = await params;
+  const prefix = lang === i18n.defaultLanguage ? '' : `/${lang}`;
+
   return (
     <main className="flex-1">
       {/* ── Hero ── */}
@@ -110,7 +114,7 @@ export default function HomePage() {
           </h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Link
-              href="/docs/v5/getting-started/quick-start"
+              href={`${prefix}/docs/v5/getting-started/quick-start`}
               className="group relative rounded-xl border border-fd-border bg-fd-card p-6 transition-colors hover:bg-fd-accent"
             >
               <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-fd-muted text-fd-foreground text-lg">
@@ -129,7 +133,7 @@ export default function HomePage() {
             </Link>
 
             <Link
-              href="/docs/v5/oracle-compatibility"
+              href={`${prefix}/docs/v5/oracle-compatibility`}
               className="group relative rounded-xl border-2 border-fd-primary/30 bg-fd-card p-6 transition-colors hover:border-fd-primary/60 hover:bg-fd-accent"
             >
               <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-fd-primary/10 text-fd-primary text-lg">
@@ -166,7 +170,7 @@ export default function HomePage() {
                   {group.cards.map((card) => (
                     <Link
                       key={card.href}
-                      href={card.href}
+                      href={`${prefix}${card.href}`}
                       className="group rounded-lg border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent"
                     >
                       <div className="mb-1 text-sm font-semibold text-fd-foreground group-hover:underline">
@@ -205,7 +209,7 @@ export default function HomePage() {
             <li className="flex items-center gap-1.5 text-xs text-fd-muted-foreground">
               <FlaskConical size={15} strokeWidth={1.5} aria-hidden="true" />
               <span>Latest product updates?</span>
-              <Link href="/docs/v5/getting-started/release-notes" className="text-fd-primary hover:underline">
+              <Link href={`${prefix}/docs/v5/getting-started/release-notes`} className="text-fd-primary hover:underline">
                 View Release Notes
               </Link>
             </li>

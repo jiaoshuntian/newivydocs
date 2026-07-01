@@ -12,16 +12,18 @@ import { getMDXComponents } from '@/components/mdx';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import { gitConfig } from '@/lib/shared';
+import { i18n } from '@/lib/i18n';
 import { FlaskConical, LifeBuoy, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { Feedback } from '@/components/feedback/client';
 import { onPageFeedbackAction } from '@/lib/feedback';
 
-export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
+export default async function Page(props: PageProps<'/[lang]/docs/[[...slug]]'>) {
   const params = await props.params;
-  if (!params.slug?.length) redirect('/docs/v5');
+  const prefix = params.lang === i18n.defaultLanguage ? '' : `/${params.lang}`;
+  if (!params.slug?.length) redirect(`${prefix}/docs/v5`);
 
-  const page = source.getPage(params.slug);
+  const page = source.getPage(params.slug, params.lang);
   if (!page) notFound();
 
   const MDX = page.data.body;
@@ -71,7 +73,7 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
           <div className="flex items-center gap-1.5 text-xs text-fd-muted-foreground">
             <FlaskConical className="size-3.5 shrink-0" aria-hidden="true" />
             <span>Latest product updates?</span>
-            <Link href="/docs/v5/getting-started/release-notes" className="text-fd-primary hover:underline">
+            <Link href={`${prefix}/docs/v5/getting-started/release-notes`} className="text-fd-primary hover:underline">
               View Release Notes
             </Link>
           </div>
@@ -81,15 +83,22 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   );
 }
 
+// The default language (`en`) is served through a rewrite (see proxy.ts —
+// `hideLocale: 'default-locale'` drops its `/en` prefix), and statically
+// prerendering a rewritten route causes a client hydration mismatch because
+// the prerendered HTML's route params don't match the visible URL's segment
+// count. Non-default locales are never rewritten, so they're safe to
+// prerender; `en` falls back to on-demand rendering (`dynamicParams`
+// defaults to `true`, so unlisted params still render, just not at build time).
 export async function generateStaticParams() {
-  return source.generateParams();
+  return source.generateParams().filter((params) => params.lang !== i18n.defaultLanguage);
 }
 
-export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): Promise<Metadata> {
+export async function generateMetadata(props: PageProps<'/[lang]/docs/[[...slug]]'>): Promise<Metadata> {
   const params = await props.params;
   if (!params.slug?.length) return {};
 
-  const page = source.getPage(params.slug);
+  const page = source.getPage(params.slug, params.lang);
   if (!page) notFound();
 
   return {

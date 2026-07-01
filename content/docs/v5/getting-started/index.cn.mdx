@@ -1,0 +1,79 @@
+---
+title: 什么是 IvorySQL？
+description: IvorySQL 是一款 Oracle 兼容的开源 PostgreSQL 分发版。了解它是什么、如何工作，以及适合哪些用户。
+---
+
+# 什么是 IvorySQL？
+
+IvorySQL 是一个先进的开源 PostgreSQL 分发版，具备完整的 Oracle 兼容能力。它由 [Highgo Software](https://www.highgo.com) 构建和维护，采用 Apache-2.0 许可协议——可永久免费使用、修改和分发。
+
+核心理念是：**在不重写应用程序的情况下，在 PostgreSQL 上运行你的 Oracle 工作负载**。IvorySQL 可以同时理解两种"方言"。你可以在同一个运行实例上，通过 1521 端口连接 Oracle 应用程序，同时通过 5432 端口连接原生 PostgreSQL 工具。
+
+<Callout type="info">
+IvorySQL 紧跟最新的 PostgreSQL 大版本。IvorySQL 5.x 基于 PostgreSQL 18 构建，可作为 PostgreSQL 18 的直接替代品。
+</Callout>
+
+## 双模式概念
+
+IvorySQL 引入了一个名为 `ivorysql.compatible_mode` 的 GUC 参数，它有两个取值：`oracle` 和 `pg`。
+
+在初始化数据目录时，你可以通过 `-m` 参数选择其基准模式：
+
+- **`-m oracle`**（默认值）——启动时即激活 Oracle 兼容模式。每个连接默认以 Oracle 模式开始，你也可以通过 `SET ivorysql.compatible_mode TO pg` 将单个会话切换到 `pg` 模式。
+- **`-m pg`**——集群表现为标准 PostgreSQL。Oracle 特性不可用，且该模式在运行时无法更改。
+
+这意味着一个 IvorySQL 集群可以同时为 Oracle 风格的应用程序和 PostgreSQL 原生应用程序提供服务，只需选择连接的端口即可。
+
+## 谁适合使用 IvorySQL？
+
+| 你的情况… | IvorySQL 能帮你… |
+|----------|-------------------|
+| 正在从 Oracle 迁移 | 直接运行你的 PL/SQL 代码和 Oracle SQL——无需完整重写 |
+| 运行混合技术栈 | 在一个开源引擎上整合 Oracle 和 PostgreSQL 工作负载 |
+| 构建新产品 | 从 PostgreSQL 起步，并针对特定功能使用 Oracle 兼容能力 |
+| 需要 PostgreSQL 替代方案 | IvorySQL 与最新 PostgreSQL 100% 兼容，并通过全部 PG 回归测试 |
+
+## 包含哪些 Oracle 特性？
+
+Oracle 兼容能力通过一个与内核绑定的插件 `ivorysql_ora` 提供，该插件随数据库一起发布，无需手动安装。
+
+在 Oracle 模式下，以下功能均可直接使用：
+
+- **PL/iSQL** —— 支持函数、存储过程、包、匿名块和嵌套子函数的 Oracle PL/SQL 语法
+- **数据类型** —— `NUMBER`、`VARCHAR2`、`DATE`、`CLOB`、`BLOB` 等
+- **内置函数** —— `SYSDATE`、`TO_CHAR`、`TO_DATE`、`NVL`、`DECODE`、`TRUNC`、`SYS_GUID` 等
+- **SQL 语法** —— `SELECT … FROM dual`、`ROWNUM`、Oracle 风格的 `LIKE` 行为、`CONNECT BY` 层级查询
+- **模式对象** —— Oracle 风格的序列（`seq.NEXTVAL`）、包、不可见列、强制视图
+- **类型属性** —— `%TYPE`、`%ROWTYPE`、OUT 参数、`CALL INTO`
+- **字符集** —— GB18030 及 NLS 参数支持
+- **XML 函数** —— Oracle 兼容的 XML 内置函数
+
+<Callout type="tip">
+不确定该用 Oracle 模式还是 PG 模式？请参阅[核心概念](/cn/docs/v5/getting-started/concepts)，获取详细对比和模式选择建议。
+</Callout>
+
+## 关键设计决策
+
+**始终与上游 PostgreSQL 兼容。** IvorySQL 从不破坏 PostgreSQL 的兼容性。每一项 Oracle 特性都是增量式添加——选择运行 IvorySQL 而非 PostgreSQL，你不会失去任何东西。
+
+**基于插件的可扩展性。** Oracle 兼容特性通过与内核绑定的插件 `ivorysql_ora` 提供。新的兼容性特性通过该插件添加，无需改动核心引擎，使升级过程更加可预测。
+
+**双端口架构。** IvorySQL 同时监听 1521 端口（Oracle 默认端口）和 5432 端口（PostgreSQL 默认端口）。你连接的端口决定了该会话的默认兼容模式，因此现有的 Oracle 连接字符串无需修改即可使用。
+
+**开源且由社区驱动。** 完整源代码——包括所有 Oracle 兼容特性——都发布在 [GitHub](https://github.com/IvorySQL/IvorySQL) 上，采用 Apache 2.0 许可协议。功能路线图由社区共同塑造。
+
+## 核心应用场景
+
+- **企业系统** —— 需要 Oracle SQL 和 PL/SQL、同时兼具 PostgreSQL 可靠性与成本优势的 ERP、金融平台和高交易量工作负载
+- **基于位置的服务** —— PostGIS 集成让你可以在 SQL 中进行地理查询
+- **数据仓库** —— 丰富的数据类型和强大的聚合能力，适用于分析型工作负载
+- **Oracle 迁移** —— 渐进式迁移 Oracle 模式和应用程序，无需一次性整体切换
+
+## 接下来去哪里？
+
+<Cards>
+  <Card href="/cn/docs/v5/getting-started/quick-start" title="快速开始" description="在 CentOS、Ubuntu 或 Docker 上，5 分钟内跑起一个 IvorySQL 实例。" />
+  <Card href="/cn/docs/v5/getting-started/concepts" title="核心概念" description="了解双模式架构、双解析器、PL/iSQL 和 GUC 参数。" />
+  <Card href="/cn/docs/v5/getting-started/release-notes" title="版本发布说明" description="IvorySQL 5.x 及更早版本的新特性。" />
+  <Card href="/cn/docs/v5/oracle-compatibility" title="Oracle 兼容性" description="按分类浏览所有 Oracle 兼容特性。" />
+</Cards>

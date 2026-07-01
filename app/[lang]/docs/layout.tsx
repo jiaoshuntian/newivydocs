@@ -4,26 +4,27 @@ import { getSidebarTabs } from 'fumadocs-ui/components/sidebar/tabs';
 import { baseOptions } from '@/lib/layout.shared';
 import { FileDown } from 'lucide-react';
 
-const docsLinks = [
-  ...baseOptions().links!,
-  {
-    type: 'icon' as const,
-    on: 'menu' as const,
-    url: '/ivorysql-docs-v5.pdf',
-    label: 'Download PDF (v5)',
-    text: 'Download PDF (v5)',
-    icon: <FileDown className="size-full" />,
-    external: true,
-  },
-];
+export default async function Layout({ params, children }: LayoutProps<'/[lang]/docs'>) {
+  const { lang } = await params;
+  const tree = source.getPageTree(lang);
 
-export default function Layout({ children }: LayoutProps<'/docs'>) {
-  const tree = source.getPageTree();
+  const docsLinks = [
+    ...baseOptions(lang).links!,
+    {
+      type: 'icon' as const,
+      on: 'menu' as const,
+      url: '/ivorysql-docs-v5.pdf',
+      label: 'Download PDF (v5)',
+      text: 'Download PDF (v5)',
+      icon: <FileDown className="size-full" />,
+      external: true,
+    },
+  ];
 
   return (
     <DocsLayout
       tree={tree}
-      {...baseOptions()}
+      {...baseOptions(lang)}
       links={docsLinks}
       // getLayoutTabs (the DocsLayout default) matches active tabs against a
       // folder's `children` only, missing its own index page (e.g. /docs/v5).
