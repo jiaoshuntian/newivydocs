@@ -1,0 +1,426 @@
+---
+title: "Operations Management"
+description: "Manage IvorySQL operations: version upgrades, access control, backup and restore, data loading with COPY, and query performance tuning."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+Since IvorySQL is based on PostgreSQL, O&M staff should also refer to the [PostgreSQL documentation](https://www.postgresql.org/docs/17/index.html) when reading and understanding this section.
+
+## Upgrade IvorySQL Version
+
+### Overview of Upgrade Schemes
+
+The IvorySQL version number consists of a major version and a minor version. For example, in IvorySQL 3.2, `3` is the major version and `2` is the minor version.
+
+Releasing a minor version does not change the internal storage format, so it is always compatible with the same major version. Upgrading minor versions is as simple as shutting down the database service, installing the replacement binary executable, and restarting the service.
+
+Major version upgrades may modify the internal data storage format and therefore require additional operations.
+
+| Upgrade method | Applicable scenarios | Shutdown time |
+|----------------|---------------------|---------------|
+| `pg_dumpall` | Small to medium sized databases (e.g. less than 100GB); supports cross-platform data migration | Depends on the size of the database |
+| `pg_upgrade` | Large and medium-sized databases (e.g. >100GB); local upgrade | A few minutes |
+| Logical Replication | Large and medium-sized databases (e.g. >100GB); cross-platform support | A few seconds |
+
+<Callout type="warn">
+New major releases usually introduce some user-visible incompatibilities and may require application programming changes. All user-visible changes are listed in the [release notes](https://www.postgresql.org/docs/current/release.html). Pay special attention to sections labeled "Migration". Although you may upgrade from one major version to another without upgrading an intermediate version, you should read the major release notes for all intermediate versions.
+</Callout>
+
+### Upgrade Data via pg_dumpall
+
+The traditional cross-version upgrade method uses `pg_dump`/`pg_dumpall` to logically back up the database and then restore it in the new version via `pg_restore`. It is recommended to use the new version of `pg_dump`/`pg_dumpall` when exporting the old version of the database.
+
+Assuming the current IvorySQL installation is in `/usr/local/pgsql` and the data directory is `/usr/local/pgsql/data`:
+
+<Steps>
+1. Stop the application and make sure no data is being updated. If necessary, modify `/usr/local/pgsql/data/pg_hba.conf` to disable others from accessing the database. Then back up the database:
+
+   ```bash
+   pg_dumpall > outputfile
+   ```
+
+2. Stop the backend services of the older version:
+
+   ```
+   pg_ctl stop
+   ```
+
+3. If the installation directory does not contain a specific version identifier, rename it (and modify it back if necessary):
+
+   ```
+   mv /usr/local/pgsql /usr/local/pgsql.old
+   ```
+
+4. Install the new version of IvorySQL software.
+
+5. Initialize a new database cluster using a dedicated database user (usually `postgres`):
+
+   ```bash
+   /usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data
+   ```
+
+6. Copy the old configuration files `pg_hba.conf`, `postgresql.conf`, etc. to the corresponding new configuration file location.
+
+7. Start a new version of the backend service:
+
+   ```bash
+   /usr/local/pgsql/bin/postgres -D /usr/local/pgsql/data
+   ```
+
+8. Restore the data using the new version of `psql`:
+
+   ```bash
+   /usr/local/pgsql/bin/psql -d postgres -f outputfile
+   ```
+</Steps>
+
+To reduce downtime, you can install the new version of IvorySQL to another directory, start the service using a different port, then perform both the export and import simultaneously:
+
+```bash
+pg_dumpall -p 5432 | psql -d postgres -p 5433
+```
+
+### Upgrade with the pg_upgrade Utility
+
+The `pg_upgrade` utility supports in-place upgrades of IvorySQL across versions. The upgrade can be performed in minutes, especially when using `--link` mode. Refer to the [pg_upgrade documentation](https://www.postgresql.org/docs/current/pgupgrade.html) for the required steps.
+
+### Upgrade Data by Copying (Logical Replication)
+
+You can create a standby server running a new version of IvorySQL using logical replication, which supports replication between different major versions of IvorySQL. Once it is synchronized with the primary server (running the older version), you can switch hosts and use the new server as primary, then shut down the older database instance. This approach allows an upgrade with only a few seconds of downtime.
+
+This upgrade method can be used with built-in logical replication tools and external logical replication systems such as pglogical, Slony, Londiste, and Bucardo.
+
+## Managing IvorySQL Database Access
+
+IvorySQL uses the concept of **Roles** to manage database access rights. A role can be thought of as a database user or a group of database users, depending on how the role is set up. Roles can own database objects and can delegate permissions on those objects to other roles.
+
+The concept of roles encompasses the concepts of "user" and "group". Database roles are global within a database cluster installation (not within a separate database).
+
+To create a role:
+
+```sql
+CREATE ROLE name;
+```
+
+To remove an existing role:
+
+```sql
+DROP ROLE name;
+```
+
+For convenience, the `createuser` and `dropuser` programs are provided as wrappers for these SQL commands:
+
+```bash
+createuser name
+dropuser name
+```
+
+To list existing roles:
+
+```sql
+SELECT rolname FROM pg_roles;
+```
+
+Or use the `\du` meta command in `psql`.
+
+It is often convenient to group users together to facilitate the management of permissions. This is done in IvorySQL by creating a role that represents a group, and then granting **membership** in that group role to individual user roles.
+
+For more details on database access management, refer to the [PostgreSQL user management documentation](https://www.postgresql.org/docs/17/user-manag.html).
+
+## Backup and Restore
+
+IvorySQL databases should be backed up regularly. There are three fundamentally different approaches to backing up IvorySQL data:
+
+- SQL dump
+- File system level backup
+- Continuous archiving
+
+### SQL Dump
+
+The SQL dump method generates a file with SQL commands that, when fed back to the server, will recreate the database in the same state as it was at the time of the dump.
+
+```bash
+pg_dump dbname > dumpfile
+```
+
+#### Restoring the Dump
+
+```bash
+psql dbname < dumpfile
+```
+
+The database `dbname` will not be created by this command, so you must create it yourself from `template0` before executing `psql`:
+
+```bash
+createdb -T template0 dbname
+```
+
+To stop on SQL errors during restore:
+
+```bash
+psql --set ON_ERROR_STOP=on dbname < infile
+```
+
+To restore as a single transaction (all or nothing):
+
+```bash
+psql -1 dbname < infile
+```
+
+To dump directly from one server to another:
+
+```bash
+pg_dump -h host1 dbname | psql -h host2 dbname
+```
+
+<Callout type="info">
+**Important:** The dumps produced by `pg_dump` are relative to `template0`. This means that any languages, procedures, etc. added via `template1` will also be dumped by `pg_dump`. As a result, when restoring, if you are using a customized `template1`, you must create the empty database from `template0`.
+</Callout>
+
+After restoring a backup, run `ANALYZE` on each database so the query optimizer has useful statistics.
+
+#### Using pg_dumpall
+
+`pg_dump` dumps only a single database at a time and does not dump information about roles or tablespaces. Use `pg_dumpall` to back up the entire contents of a database cluster:
+
+```bash
+pg_dumpall > dumpfile
+```
+
+Restore with:
+
+```bash
+psql -f dumpfile ivorysql
+```
+
+Restoring a `pg_dumpall` dump always requires database superuser access to restore the role and tablespace information.
+
+#### Handling Large Databases
+
+**Use compressed dumps:**
+
+```bash
+pg_dump dbname | gzip > filename.gz
+
+# Reload with:
+gunzip -c filename.gz | psql dbname
+```
+
+**Use `split` to create smaller files:**
+
+```bash
+pg_dump dbname | split -b 2G - filename
+
+# Reload with:
+cat filename* | psql dbname
+```
+
+**Use pg_dump's custom dump format** (with built-in compression and selective restore):
+
+```bash
+pg_dump -Fc dbname > filename
+
+# Restore with:
+pg_restore -d dbname filename
+```
+
+**Use parallel dump/restore:**
+
+```bash
+pg_dump -j num -F d -f out.dir dbname
+pg_restore -j num -d dbname out.dir
+```
+
+### File System Level Backup
+
+An alternative backup strategy is to directly copy the files that IvorySQL uses to store the data. For example:
+
+```bash
+tar -cf backup.tar /usr/local/pgsql/data
+```
+
+There are two important restrictions:
+
+1. The database server **must** be shut down to get a usable backup. Half-way measures such as disallowing all connections will not work.
+2. File system backups only work for complete backup and restoration of an entire database cluster — not for individual tables or databases.
+
+A useful alternative is to make a "consistent snapshot" of the data directory if the file system supports that functionality. When you start the database server on such backed-up data, it will replay the WAL log as if recovering from a crash. Be sure to include the WAL files in your backup.
+
+### Continuous Archiving and Point-in-Time Recovery (PITR)
+
+IvorySQL maintains a **write ahead log** (WAL) in the `pg_wal/` subdirectory. By combining a file-system-level backup with backup of the WAL files, you can:
+
+- Restore the database to any point in time since your base backup was taken
+- Create a warm standby system by continuously feeding WAL files to another machine
+- Avoid needing a perfectly consistent file system backup as the starting point
+
+<Callout type="info">
+`pg_dump` and `pg_dumpall` do not produce file-system-level backups and cannot be used as part of a continuous-archiving solution. Such dumps are logical and do not contain enough information to be used by WAL replay.
+</Callout>
+
+For more information on creating archives and backups, refer to the [PostgreSQL backup documentation](https://www.postgresql.org/docs/17/backup.html).
+
+## Loading and Unloading Data
+
+`COPY` moves data between IvorySQL tables and standard file-system files.
+
+- `COPY TO` copies the contents of a table **to** a file
+- `COPY FROM` copies data **from** a file to a table
+
+### Syntax
+
+```
+COPY table_name [ ( column_name [, ...] ) ]
+    FROM { 'filename' | PROGRAM 'command' | STDIN }
+    [ [ WITH ] ( option [, ...] ) ]
+    [ WHERE condition ]
+
+COPY { table_name [ ( column_name [, ...] ) ] | ( query ) }
+    TO { 'filename' | PROGRAM 'command' | STDOUT }
+    [ [ WITH ] ( option [, ...] ) ]
+```
+
+Common options include `FORMAT`, `DELIMITER`, `NULL`, `HEADER`, `QUOTE`, `ESCAPE`, and `ENCODING`.
+
+On successful completion, `COPY` returns a command tag of the form `COPY count` where count is the number of rows copied.
+
+### File Formats
+
+**Text format** (default): One line per table row, columns separated by the delimiter character (tab by default).
+
+**CSV format**: Comma-separated values format compatible with many other programs. Use `FORMAT CSV` option.
+
+**Binary format**: All data stored as binary. Faster but less portable:
+
+```bash
+pg_dump -Fc dbname > filename
+```
+
+### Examples
+
+Copy a table to the client using `|` as the field delimiter:
+
+```sql
+COPY country TO STDOUT (DELIMITER '|');
+```
+
+Copy a filtered subset to a file:
+
+```sql
+COPY (SELECT * FROM country WHERE country_name LIKE 'A%')
+    TO '/usr1/proj/bray/sql/a_list_countries.copy';
+```
+
+Copy to a compressed file via a program:
+
+```sql
+COPY country TO PROGRAM 'gzip > /usr1/proj/bray/sql/country_data.gz';
+```
+
+<Callout type="info">
+`COPY` with a file name instructs the IvorySQL server to directly read from or write to a file. The file must be accessible by the IvorySQL user (the user ID the server runs as). Do not confuse `COPY` with the psql instruction `\copy` — `\copy` uses the psql client's file system, not the server's.
+</Callout>
+
+Each backend running `COPY` reports its progress in the `pg_stat_progress_copy` view.
+
+## Performance Tips
+
+Query performance can be affected by many factors. The primary tool for understanding query plans is `EXPLAIN`.
+
+### Using EXPLAIN
+
+IvorySQL devises a **query plan** for each query it receives. Use `EXPLAIN` to see what query plan the planner creates:
+
+```sql
+EXPLAIN SELECT * FROM tenk1;
+
+                         QUERY PLAN
+-------------------------------------------------------------
+ Seq Scan on tenk1  (cost=0.00..458.00 rows=10000 width=244)
+```
+
+The numbers in parentheses are:
+1. Estimated start-up cost (before the output phase can begin)
+2. Estimated total cost
+3. Estimated number of rows output
+4. Estimated average width of rows (in bytes)
+
+With a `WHERE` clause:
+
+```sql
+EXPLAIN SELECT * FROM tenk1 WHERE unique1 < 7000;
+
+                         QUERY PLAN
+------------------------------------------------------------
+ Seq Scan on tenk1  (cost=0.00..483.00 rows=7001 width=244)
+   Filter: (unique1 < 7000)
+```
+
+When the planner decides to use an index:
+
+```sql
+EXPLAIN SELECT * FROM tenk1 WHERE unique1 < 100;
+
+                                  QUERY PLAN
+-----------------------------------------------------------------------------
+ Bitmap Heap Scan on tenk1  (cost=5.07..229.20 rows=101 width=244)
+   Recheck Cond: (unique1 < 100)
+   ->  Bitmap Index Scan on tenk1_unique1  (cost=0.00..5.04 rows=101 width=0)
+         Index Cond: (unique1 < 100)
+```
+
+### EXPLAIN ANALYZE
+
+Use `EXPLAIN ANALYZE` to check the accuracy of the planner's estimates. With this option, `EXPLAIN` actually executes the query and shows both the estimated and actual row counts and run times:
+
+```sql
+EXPLAIN ANALYZE SELECT *
+FROM tenk1 t1, tenk2 t2
+WHERE t1.unique1 < 10 AND t1.unique2 = t2.unique2;
+
+                                                           QUERY PLAN
+----------------------------------------------------------------------
+ Nested Loop  (cost=4.65..118.62 rows=10 width=488) (actual time=0.128..0.377 rows=10 loops=1)
+   ->  Bitmap Heap Scan on tenk1 t1  (cost=4.36..39.47 rows=10 width=244) (actual time=0.057..0.121 rows=10 loops=1)
+         Recheck Cond: (unique1 < 10)
+         ->  Bitmap Index Scan on tenk1_unique1  (cost=0.00..4.36 rows=10 width=0) (actual time=0.024..0.024 rows=10 loops=1)
+               Index Cond: (unique1 < 10)
+   ->  Index Scan using tenk2_unique2 on tenk2 t2  (cost=0.29..7.91 rows=1 width=244) (actual time=0.021..0.022 rows=1 loops=10)
+         Index Cond: (unique2 = t1.unique2)
+ Planning time: 0.181 ms
+ Execution time: 0.501 ms
+```
+
+<Callout type="info">
+The "actual time" values are in milliseconds of real time, while the `cost` estimates are expressed in arbitrary units, so they are unlikely to match up. The most important thing to look for is whether the estimated row counts are reasonably close to reality.
+</Callout>
+
+### Common Join Types
+
+IvorySQL's planner uses different join strategies depending on the data:
+
+- **Nested Loop**: For small outer result sets with index access to the inner table
+- **Hash Join**: Builds an in-memory hash table from one side, then scans the other side
+- **Merge Join**: Requires both inputs to be sorted on the join keys; often used when inputs are naturally ordered
+
+To force the planner to try a different strategy, use the enable/disable flags:
+
+```sql
+SET enable_sort = off;
+SET enable_hashjoin = off;
+```
+
+<Cards>
+  <Card
+    title="Monitoring"
+    description="Monitor cluster activity with pg_stat_* views and disk usage queries."
+    href="/docs/v1/monitor-manage/monitoring"
+  />
+  <Card
+    title="Maintenance"
+    description="Keep tables and indexes healthy with VACUUM, ANALYZE, and reindexing."
+    href="/docs/v1/monitor-manage/maintenance"
+  />
+</Cards>

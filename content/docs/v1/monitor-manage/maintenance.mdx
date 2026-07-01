@@ -1,0 +1,336 @@
+---
+title: "Maintenance"
+description: "Routine database maintenance in IvorySQL: VACUUM, ANALYZE, reindexing, log rotation, and high availability setup."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+## Routine Vacuuming
+
+IvorySQL databases require periodic maintenance known as **vacuuming**. For many installations, it is sufficient to let vacuuming be performed by the **autovacuum daemon**. Some administrators supplement or replace the daemon's activities with manually-managed `VACUUM` commands, typically executed on a schedule via cron or Task Scheduler scripts.
+
+### Why Vacuum?
+
+IvorySQL's `VACUUM` command must process each table on a regular basis for several reasons:
+
+1. To recover or reuse disk space occupied by updated or deleted rows.
+2. To update data statistics used by the PostgreSQL query planner.
+3. To update the visibility map, which speeds up index-only scans.
+4. To protect against loss of very old data due to **transaction ID wraparound** or **multixact ID wraparound**.
+
+### Standard VACUUM vs. VACUUM FULL
+
+There are two variants of `VACUUM`:
+
+- **Standard `VACUUM`**: Removes dead row versions and marks the space available for future reuse. Runs in parallel with production database operations. Does not return space to the operating system (except when pages at the end of a table become entirely free).
+- **`VACUUM FULL`**: Actively compacts tables by writing a complete new version of the table file with no dead space. Minimizes table size but runs much more slowly and requires an `ACCESS EXCLUSIVE` lock.
+
+The usual goal of routine vacuuming is to do standard `VACUUM`s often enough to avoid needing `VACUUM FULL`.
+
+<Callout type="tip">
+Plain `VACUUM` may not be satisfactory when a table contains large numbers of dead row versions as a result of massive update or delete activity. In that case, you will need to use `VACUUM FULL`, or alternatively `CLUSTER` or one of the table-rewriting variants of `ALTER TABLE`. These commands all require an `ACCESS EXCLUSIVE` lock and temporarily use extra disk space approximately equal to the size of the table.
+</Callout>
+
+<Callout type="tip">
+If you have a table whose entire contents are deleted on a periodic basis, consider using `TRUNCATE` rather than `DELETE` followed by `VACUUM`. `TRUNCATE` removes the entire content immediately, without requiring a subsequent `VACUUM` to reclaim disk space. The disadvantage is that strict MVCC semantics are violated.
+</Callout>
+
+### Recovering Disk Space
+
+In IvorySQL, an `UPDATE` or `DELETE` of a row does not immediately remove the old version of the row. This is necessary for multiversion concurrency control (MVCC): the row version must not be deleted while it is still potentially visible to other transactions. Eventually, the outdated or deleted row version is no longer of interest to any transaction. The space it occupies must then be reclaimed for reuse by new rows — this is done by running `VACUUM`.
+
+### Updating Planner Statistics
+
+The IvorySQL query planner relies on statistical information about the contents of tables to generate good plans. These statistics are gathered by the `ANALYZE` command, which can be invoked on its own or as an optional step in `VACUUM`.
+
+<Callout type="tip">
+Although per-column tweaking of `ANALYZE` frequency might not be very productive, you might find it worthwhile to do per-column adjustment of the level of detail of the statistics collected by `ANALYZE`. Columns that are heavily used in `WHERE` clauses and have highly irregular data distributions might require a finer-grain data histogram than other columns. See `ALTER TABLE SET STATISTICS`.
+</Callout>
+
+<Callout type="tip">
+The autovacuum daemon does not issue `ANALYZE` commands for foreign tables or partitioned tables. If your queries require statistics on these objects for proper planning, run manual `ANALYZE` commands on a suitable schedule.
+</Callout>
+
+### Updating the Visibility Map
+
+Vacuum maintains a [visibility map](https://www.postgresql.org/docs/current/storage-vm.html) for each table to track which pages contain only tuples that are known to be visible to all active transactions. This has two purposes:
+
+1. Vacuum can skip such pages on the next run since there is nothing to clean up.
+2. IvorySQL can answer some queries using only the index, without reference to the underlying table (**index-only scans**).
+
+### Preventing Transaction ID Wraparound Failures
+
+IvorySQL's MVCC transaction semantics depend on being able to compare transaction ID (XID) numbers. Since transaction IDs have limited size (32 bits), a cluster that runs for a long time (more than 4 billion transactions) would suffer **transaction ID wraparound**. To avoid this, it is necessary to vacuum every table in every database at least once every two billion transactions.
+
+`VACUUM` will mark rows as **frozen**, indicating they were inserted by a transaction that committed sufficiently far in the past that its effects are certain to be visible to all current and future transactions.
+
+If for some reason autovacuum fails to clear old XIDs from a table, the system will begin to emit warning messages:
+
+```
+WARNING:  database "mydb" must be vacuumed within 39985967 transactions
+HINT:  To avoid a database shutdown, execute a database-wide VACUUM in that database.
+```
+
+If these warnings are ignored, the system will shut down and refuse to start any new transactions once there are fewer than three million transactions left until wraparound:
+
+```
+ERROR:  database is not accepting commands to avoid wraparound data loss in database "mydb"
+HINT:  Stop the postmaster and vacuum that database in single-user mode.
+```
+
+To track the age of the oldest unfrozen XIDs:
+
+```sql
+SELECT c.oid::regclass as table_name,
+       greatest(age(c.relfrozenxid),age(t.relfrozenxid)) as age
+FROM pg_class c
+LEFT JOIN pg_class t ON c.reltoastrelid = t.oid
+WHERE c.relkind IN ('r', 'm');
+
+SELECT datname, age(datfrozenxid) FROM pg_database;
+```
+
+### The Autovacuum Daemon
+
+IvorySQL has an optional but highly recommended feature called **autovacuum**, whose purpose is to automate the execution of `VACUUM` and `ANALYZE` commands. When enabled, autovacuum checks for tables that have had a large number of inserted, updated, or deleted tuples.
+
+The autovacuum daemon consists of multiple processes:
+
+- **Autovacuum launcher**: A persistent daemon process that starts autovacuum worker processes for all databases.
+- **Autovacuum workers**: Execute `VACUUM` and/or `ANALYZE` as needed on each table within a database.
+
+The vacuum threshold formula:
+
+```
+vacuum threshold = vacuum base threshold + vacuum scale factor * number of tuples
+```
+
+Where `vacuum base threshold` is `autovacuum_vacuum_threshold`, `vacuum scale factor` is `autovacuum_vacuum_scale_factor`, and the number of tuples is `pg_class.reltuples`.
+
+Similarly for analyze:
+
+```
+analyze threshold = analyze base threshold + analyze scale factor * number of tuples
+```
+
+<Callout type="warn">
+Regularly running commands that acquire locks conflicting with a `SHARE UPDATE EXCLUSIVE` lock (e.g., `ANALYZE`) can effectively prevent autovacuums from ever completing.
+</Callout>
+
+## Routine Reindexing
+
+In some situations it is worthwhile to rebuild indexes periodically with the `REINDEX` command. B-tree index pages that have become completely empty are reclaimed for re-use. However, if all but a few index keys on a page have been deleted, the page remains allocated, which can cause poor use of space for certain usage patterns.
+
+Also, for B-tree indexes, a freshly-constructed index is slightly faster to access than one that has been updated many times, because logically adjacent pages are usually also physically adjacent in a newly built index.
+
+`REINDEX` can be used safely and easily in all cases. This command requires an `ACCESS EXCLUSIVE` lock by default; it is often preferable to execute it with the `CONCURRENTLY` option, which requires only a `SHARE UPDATE EXCLUSIVE` lock:
+
+```sql
+REINDEX INDEX CONCURRENTLY my_index;
+REINDEX TABLE CONCURRENTLY my_table;
+```
+
+## Log File Maintenance
+
+It is a good idea to save the database server's log output rather than discarding it. Log output is invaluable when diagnosing problems. However, log output tends to be voluminous so you need to **rotate** the log files so that new log files are started and old ones removed after a reasonable period of time.
+
+### Built-in Log Rotation
+
+Set `logging_collector = true` in `postgresql.conf` to use the built-in log rotation facility. This also allows capturing log data in machine-readable CSV format.
+
+### External Log Rotation
+
+You can use an external log rotation program such as `rotatelogs` (from the Apache distribution):
+
+```
+pg_ctl start | rotatelogs /var/log/pgsql_log 86400
+```
+
+### Using logrotate with PostgreSQL
+
+You can combine PostgreSQL's built-in logging collector with `logrotate`. When initiating log rotation, logrotate must ensure the application sends further output to the new file. In PostgreSQL, run `pg_ctl` with the `logrotate` option:
+
+```
+pg_ctl logrotate
+```
+
+<Callout type="info">
+When using static log file names, the server might fail to reopen the log file if the max open file limit is reached or a file table overflow occurs. In this case, log messages are sent to the old log file until a successful log rotation.
+</Callout>
+
+### Sending Logs to syslog
+
+To send logs to syslog, set `log_destination = 'syslog'` in `postgresql.conf`. Send a `SIGHUP` signal to the syslog daemon whenever you want it to start writing a new log file.
+
+Note that on many systems, syslog is not very reliable with large log messages — it might truncate or drop messages. On Linux, syslog flushes each message to disk, which can yield poor performance.
+
+## High Availability, Load Balancing, and Replication
+
+### Comparison of Different Solutions
+
+| Feature | Shared Disk | File System Repl. | WAL Shipping | Logical Repl. | Trigger-Based Repl. | SQL Middleware | Async MM Repl. | Sync MM Repl. |
+|---------|-------------|-------------------|--------------|---------------|---------------------|----------------|----------------|---------------|
+| Popular examples | NAS | DRBD | built-in streaming | built-in logical, pglogical | Londiste, Slony | pgpool-II | Bucardo | — |
+| Comm. method | shared disk | disk blocks | WAL | logical decoding | table rows | SQL | table rows | table rows and row locks |
+| No special hardware required | | • | • | • | • | • | • | • |
+| Allows multiple primary servers | | | | • | | • | • | • |
+| No overhead on primary | • | | • | • | | • | | |
+| Primary failure will never lose data | • | • | with sync on | with sync on | | • | | • |
+| Replicas accept read-only queries | | | with hot standby | • | • | • | • | • |
+
+### Log-Shipping Standby Servers
+
+#### Planning
+
+Create the primary and standby servers to be as similar as possible, at least from the perspective of the database server. In particular, the path names associated with tablespaces will be passed across unmodified, so both servers must have the same mount paths for tablespaces if that feature is used.
+
+In general, log shipping between servers running different major IvorySQL release levels is not possible.
+
+#### Standby Server Operation
+
+A server enters standby mode if a `standby.signal` file exists in the data directory when the server is started.
+
+In standby mode, the server continuously applies WAL received from the primary server. The standby can read WAL from:
+1. A WAL archive (via `restore_command`)
+2. Directly from the primary over a TCP connection (streaming replication)
+3. WAL files found in the standby cluster's `pg_wal` directory
+
+Standby mode is exited when `pg_ctl promote` is run, `pg_promote()` is called, or a trigger file is found (`promote_trigger_file`).
+
+#### Preparing the Primary for Standby Servers
+
+Set up continuous archiving on the primary to an archive directory accessible from the standby. If you want to use streaming replication:
+
+1. Set up authentication on the primary to allow replication connections (create a role, add an entry to `pg_hba.conf` with `database = replication`)
+2. Ensure `max_wal_senders` is set to a sufficiently large value
+3. If replication slots will be used, ensure `max_replication_slots` is set sufficiently high
+
+#### Setting Up a Standby Server
+
+<Steps>
+1. Restore a base backup taken from the primary server
+2. Create a `standby.signal` file in the standby's cluster data directory
+3. Set `restore_command` to copy files from the WAL archive
+4. If using streaming replication, set `primary_conninfo` with a libpq connection string pointing to the primary
+5. If setting up for high availability, configure WAL archiving, connections, and authentication as on the primary
+</Steps>
+
+Simple configuration example:
+
+```
+primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass options=''-c wal_sender_timeout=5000'''
+restore_command = 'cp /path/to/archive/%f %p'
+archive_cleanup_command = 'pg_archivecleanup /path/to/archive %r'
+```
+
+### Streaming Replication
+
+Streaming replication allows a standby server to stay more up-to-date than is possible with file-based log shipping. The standby connects to the primary, which streams WAL records to the standby as they are generated, without waiting for the WAL file to be filled.
+
+Streaming replication is asynchronous by default, with typically less than one second of delay assuming the standby is powerful enough to keep up with the load.
+
+#### Authentication
+
+Set up a dedicated user account with `REPLICATION` and `LOGIN` privileges for replication. Example `pg_hba.conf` entry:
+
+```
+# Allow the user "foo" from host 192.168.1.100 to connect to the primary
+# as a replication standby if the user's password is correctly supplied.
+#
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+host    replication     foo             192.168.1.100/32        md5
+```
+
+#### Replication Slots
+
+Replication slots provide an automated way to ensure that the primary does not remove WAL segments until they have been received by all standbys. Create a replication slot:
+
+```sql
+SELECT * FROM pg_create_physical_replication_slot('node_a_slot');
+  slot_name  | lsn
+-------------+-----
+ node_a_slot |
+
+SELECT slot_name, slot_type, active FROM pg_replication_slots;
+  slot_name  | slot_type | active
+-------------+-----------+--------
+ node_a_slot | physical  | f
+(1 row)
+```
+
+Configure the standby to use this slot:
+
+```
+primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
+primary_slot_name = 'node_a_slot'
+```
+
+### Synchronous Replication
+
+Synchronous replication offers the ability to confirm that all changes made by a transaction have been transferred to one or more synchronous standby servers before the commit is acknowledged to the client.
+
+Configure synchronous replication by setting `synchronous_standby_names` to a non-empty value:
+
+```
+# Priority-based: wait for the first 2 of s1, s2, s3
+synchronous_standby_names = 'FIRST 2 (s1, s2, s3)'
+
+# Quorum-based: wait for any 2 of s1, s2, s3
+synchronous_standby_names = 'ANY 2 (s1, s2, s3)'
+```
+
+### Failover
+
+If the primary server fails, the standby server should begin failover procedures.
+
+To trigger failover of a log-shipping standby server:
+- Run `pg_ctl promote`
+- Call `pg_promote()`
+- Create a trigger file with the file name and path specified by `promote_trigger_file`
+
+Once failover to the standby occurs, there is only a single server in operation (a degenerate state). To return to normal operation, a standby server must be recreated. The [pg_rewind](https://www.postgresql.org/docs/current/app-pgrewind.html) utility can speed up this process on large clusters.
+
+<Callout type="warn">
+Many failover systems use a heartbeat mechanism to continually verify connectivity and viability of the primary. It is also possible to use a third system (a witness server) to prevent inappropriate failover. Whichever approach you use, be careful about STONITH (Shoot The Other Node In The Head) scenarios — situations where both systems think they are the primary will lead to data loss.
+</Callout>
+
+### Hot Standby
+
+Hot standby is the ability to connect to the server and run read-only queries while the server is in archive recovery or standby mode.
+
+When `hot_standby = true` is set and a `standby.signal` file is present, the server will accept read-only connections once recovery has brought the system to a consistent state. All such connections are strictly read-only.
+
+Transactions during hot standby may issue:
+- Query access: `SELECT`, `COPY TO`
+- Cursor commands: `DECLARE`, `FETCH`, `CLOSE`
+- Settings: `SHOW`, `SET`, `RESET`
+- Transaction management: `BEGIN`, `END`, `ABORT`, `SAVEPOINT`, etc.
+
+DML statements (`INSERT`, `UPDATE`, `DELETE`) and DDL statements (`CREATE`, `DROP`, `ALTER`) are not permitted.
+
+#### Handling Query Conflicts
+
+Conflicts can occur between standby queries and WAL replay. The most common cause is "early cleanup" — when VACUUM on the primary removes row versions that are still visible to a transaction on the standby.
+
+Key parameters for managing conflicts:
+
+| Parameter | Description |
+|-----------|-------------|
+| `max_standby_archive_delay` | Maximum delay for WAL applied from archive |
+| `max_standby_streaming_delay` | Maximum delay for WAL applied via streaming |
+| `hot_standby_feedback` | Prevents VACUUM from removing recently-dead rows visible to standby |
+| `vacuum_defer_cleanup_age` | Delays cleanup of dead rows on the primary |
+
+<Cards>
+  <Card
+    title="Monitoring"
+    description="Monitor cluster activity with pg_stat_* views and disk usage queries."
+    href="/docs/v1/monitor-manage/monitoring"
+  />
+  <Card
+    title="Operations Management"
+    description="Handle upgrades, backups, data loading, and performance tuning."
+    href="/docs/v1/monitor-manage/operations"
+  />
+</Cards>

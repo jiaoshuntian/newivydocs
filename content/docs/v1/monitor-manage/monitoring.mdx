@@ -1,0 +1,353 @@
+---
+title: "Monitoring"
+description: "Monitor IvorySQL database activity using Unix tools, cumulative statistics views, disk usage queries, and dynamic tracing."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+## Monitoring Database Activity
+
+### Standard Unix Tools
+
+On most Unix platforms, IvorySQL modifies its command title as reported by `ps`, so that individual server processes can readily be identified. A sample display is:
+
+```
+$ ps auxww | grep ^postgres
+postgres  15551  0.0  0.1  57536  7132 pts/0    S    18:02   0:00 postgres -i
+postgres  15554  0.0  0.0  57536  1184 ?        Ss   18:02   0:00 postgres: background writer
+postgres  15555  0.0  0.0  57536   916 ?        Ss   18:02   0:00 postgres: checkpointer
+postgres  15556  0.0  0.0  57536   916 ?        Ss   18:02   0:00 postgres: walwriter
+postgres  15557  0.0  0.0  58504  2244 ?        Ss   18:02   0:00 postgres: autovacuum launcher
+postgres  15558  0.0  0.0  17512  1068 ?        Ss   18:02   0:00 postgres: stats collector
+postgres  15582  0.0  0.0  58772  3080 ?        Ss   18:04   0:00 postgres: joe runbug 127.0.0.1 idle
+postgres  15606  0.0  0.0  58772  3052 ?        Ss   18:07   0:00 postgres: tgl regression [local] SELECT waiting
+postgres  15610  0.0  0.0  58772  3056 ?        Ss   18:07   0:00 postgres: tgl regression [local] idle in transaction
+```
+
+The first process is the primary server process. The next background processes are launched automatically. Each remaining process handles one client connection and shows its status in the form:
+
+```
+postgres: user database host activity
+```
+
+The activity field can be `idle`, `idle in transaction`, a command type such as `SELECT`, or `waiting` if blocked by a lock.
+
+If `cluster_name` has been configured it also appears in `ps` output:
+
+```
+$ psql -c 'SHOW cluster_name'
+ cluster_name
+--------------
+ server1
+(1 row)
+
+$ ps aux|grep server1
+postgres   27093  0.0  0.0  30096  2752 ?        Ss   11:34   0:00 postgres: server1: background writer
+```
+
+<Callout type="tip">
+Solaris requires special handling. Use `/usr/ucb/ps` rather than `/bin/ps`, and use two `w` flags. Your original invocation of the `postgres` command must also have a shorter `ps` status display than that provided by each server process.
+</Callout>
+
+### The Cumulative Statistics System
+
+IvorySQL's **cumulative statistics system** supports collection and reporting of information about server activity. Accesses to tables and indexes in both disk-block and individual-row terms are counted. The total number of rows in each table, and information about vacuum and analyze actions for each table are also counted. If enabled, calls to user-defined functions and the total time spent in each one are counted as well.
+
+IvorySQL also supports reporting dynamic information about what is happening right now, such as the exact command currently being executed by other server processes.
+
+#### Statistics Collection Configuration
+
+Statistics collection adds some overhead to query execution. It is controlled by configuration parameters normally set in `postgresql.conf`:
+
+| Parameter | Description |
+|-----------|-------------|
+| [`track_activities`](https://www.postgresql.org/docs/current/runtime-config-statistics.html#GUC-TRACK-ACTIVITIES) | Enables monitoring of the current command being executed by any server process |
+| [`track_counts`](https://www.postgresql.org/docs/current/runtime-config-statistics.html#GUC-TRACK-COUNTS) | Controls whether cumulative statistics are collected about table and index accesses |
+| [`track_functions`](https://www.postgresql.org/docs/current/runtime-config-statistics.html#GUC-TRACK-FUNCTIONS) | Enables tracking of usage of user-defined functions |
+| [`track_io_timing`](https://www.postgresql.org/docs/current/runtime-config-statistics.html#GUC-TRACK-IO-TIMING) | Enables monitoring of block read and write times |
+| [`track_wal_io_timing`](https://www.postgresql.org/docs/current/runtime-config-statistics.html#GUC-TRACK-WAL-IO-TIMING) | Enables monitoring of WAL write times |
+
+Cumulative statistics are collected in shared memory. Each IvorySQL process collects statistics locally, then updates the shared data at appropriate intervals. When a server shuts down cleanly, a permanent copy of the statistics data is stored in the `pg_stat` subdirectory, so that statistics can be retained across server restarts.
+
+#### Viewing Statistics
+
+##### Dynamic Statistics Views
+
+These views show the current state of the system in real time:
+
+| View Name | Description |
+|-----------|-------------|
+| `pg_stat_activity` | One row per server process, showing state and current query |
+| `pg_stat_replication` | One row per WAL sender process, showing replication statistics |
+| `pg_stat_wal_receiver` | Only one row, showing statistics about the WAL receiver |
+| `pg_stat_recovery_prefetch` | Only one row, showing statistics about blocks prefetched during recovery |
+| `pg_stat_subscription` | At least one row per subscription, showing information about subscription workers |
+| `pg_stat_ssl` | One row per connection, showing SSL usage information |
+| `pg_stat_gssapi` | One row per connection, showing GSSAPI authentication information |
+| `pg_stat_progress_analyze` | One row per backend running `ANALYZE` |
+| `pg_stat_progress_create_index` | One row per backend running `CREATE INDEX` or `REINDEX` |
+| `pg_stat_progress_vacuum` | One row per backend running `VACUUM` |
+| `pg_stat_progress_cluster` | One row per backend running `CLUSTER` or `VACUUM FULL` |
+| `pg_stat_progress_basebackup` | One row per WAL sender streaming a base backup |
+| `pg_stat_progress_copy` | One row per backend running `COPY` |
+
+##### Collected Statistics Views
+
+These views show accumulated statistics over time:
+
+| View Name | Description |
+|-----------|-------------|
+| `pg_stat_archiver` | Statistics about the WAL archiver process |
+| `pg_stat_bgwriter` | Statistics about the background writer process |
+| `pg_stat_wal` | Statistics about WAL activity |
+| `pg_stat_database` | Database-wide statistics, one row per database |
+| `pg_stat_database_conflicts` | Query cancels due to conflicts with recovery on standby servers |
+| `pg_stat_all_tables` | Access statistics for each table |
+| `pg_stat_sys_tables` | Same as above, system tables only |
+| `pg_stat_user_tables` | Same as above, user tables only |
+| `pg_stat_xact_all_tables` | In-transaction table statistics (not yet flushed to cumulative views) |
+| `pg_stat_all_indexes` | Access statistics for each index |
+| `pg_stat_sys_indexes` | Same as above, system indexes only |
+| `pg_stat_user_indexes` | Same as above, user indexes only |
+| `pg_statio_all_tables` | I/O statistics for each table |
+| `pg_statio_all_indexes` | I/O statistics for each index |
+| `pg_statio_all_sequences` | I/O statistics for each sequence |
+| `pg_stat_user_functions` | Execution statistics for tracked functions |
+| `pg_stat_slru` | Statistics about SLRU cache access |
+| `pg_stat_replication_slots` | Replication slot usage statistics |
+| `pg_stat_subscription_stats` | Subscription error statistics |
+
+The `pg_statio_` views are primarily useful for determining the effectiveness of the buffer cache. When actual disk reads are much smaller than buffer hits, the cache is satisfying most requests without kernel I/O calls.
+
+### `pg_stat_activity`
+
+The `pg_stat_activity` view has one row per server process, showing information related to the current activity of that process.
+
+Key columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `datname` | name | Name of the database this backend is connected to |
+| `pid` | integer | Process ID of this backend |
+| `usename` | name | Name of the user logged into this backend |
+| `application_name` | text | Name of the application connected to this backend |
+| `client_addr` | inet | IP address of the client |
+| `state` | text | Current state: `active`, `idle`, `idle in transaction`, `idle in transaction (aborted)`, `fastpath function call`, or `disabled` |
+| `wait_event_type` | text | Type of event the backend is waiting on, if any |
+| `wait_event` | text | Wait event name if backend is currently waiting |
+| `query` | text | Text of the most recent query |
+| `backend_type` | text | Type of backend process |
+
+<Callout type="info">
+The `wait_event` and `state` columns are independent. If a backend is `active` and `wait_event` is non-null, a query is executing but is blocked somewhere in the system.
+</Callout>
+
+#### Wait Event Types
+
+| Wait Event Type | Description |
+|-----------------|-------------|
+| `Activity` | Server process is idle, waiting in its main processing loop |
+| `BufferPin` | Waiting for exclusive access to a data buffer |
+| `Client` | Waiting for activity on a socket connected to a user application |
+| `Extension` | Waiting for a condition defined by an extension module |
+| `IO` | Waiting for an I/O operation to complete |
+| `IPC` | Waiting for some interaction with another server process |
+| `Lock` | Waiting for a heavyweight lock |
+| `LWLock` | Waiting for a lightweight lock |
+| `Timeout` | Waiting for a timeout to expire |
+
+To view processes currently waiting:
+
+```sql
+SELECT pid, wait_event_type, wait_event FROM pg_stat_activity WHERE wait_event IS NOT NULL;
+ pid  | wait_event_type | wait_event
+------+-----------------+------------
+ 2540 | Lock            | relation
+ 6644 | LWLock          | ProcArray
+(2 rows)
+```
+
+### `pg_stat_replication`
+
+The `pg_stat_replication` view contains one row per WAL sender process, showing statistics about replication to that sender's connected standby server.
+
+Key columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `pid` | integer | Process ID of the WAL sender |
+| `usename` | name | User logged into this WAL sender |
+| `client_addr` | inet | IP address of the connected standby |
+| `state` | text | Current WAL sender state: `startup`, `catchup`, `streaming`, `backup`, or `stopping` |
+| `sent_lsn` | pg_lsn | Last WAL location sent |
+| `write_lsn` | pg_lsn | Last WAL location written to disk by this standby |
+| `flush_lsn` | pg_lsn | Last WAL location flushed to disk by this standby |
+| `replay_lsn` | pg_lsn | Last WAL location replayed into the database on this standby |
+| `write_lag` | interval | Delay for `remote_write` synchronous commit level |
+| `flush_lag` | interval | Delay for `on` synchronous commit level |
+| `replay_lag` | interval | Delay for `remote_apply` synchronous commit level |
+| `sync_state` | text | Synchronous state: `async`, `potential`, `sync`, or `quorum` |
+
+<Callout type="info">
+The reported lag times are measurements of the time taken for recent WAL to be written, flushed, and replayed. They are not predictions of how long it will take for the standby to catch up. Lag columns revert to NULL after a short time on a fully replayed idle system.
+</Callout>
+
+### `pg_stat_database`
+
+The `pg_stat_database` view contains one row per database with wide-ranging statistics:
+
+Key columns include `numbackends` (current connections), `xact_commit`, `xact_rollback`, `blks_read`, `blks_hit` (buffer cache hits), `tup_inserted`, `tup_updated`, `tup_deleted`, `deadlocks`, and `temp_files`.
+
+### Statistics Functions
+
+Useful utility functions for working with statistics:
+
+| Function | Description |
+|----------|-------------|
+| `pg_stat_clear_snapshot()` | Discards the current statistics snapshot or cached values |
+| `pg_stat_reset()` | Resets all statistics counters for the current database to zero |
+| `pg_stat_reset_shared(text)` | Resets cluster-wide statistics (`bgwriter`, `archiver`, `wal`, `recovery_prefetch`) |
+| `pg_stat_reset_single_table_counters(oid)` | Resets statistics for a single table or index |
+| `pg_stat_reset_single_function_counters(oid)` | Resets statistics for a single function |
+
+<Callout type="warn">
+Using `pg_stat_reset()` also resets counters that autovacuum uses to determine when to trigger a vacuum or analyze. Resetting these counters can cause autovacuum to skip necessary work, leading to table bloat or outdated statistics. Run a database-wide `ANALYZE` after resetting statistics.
+</Callout>
+
+## View Locks
+
+The `pg_locks` system table allows the database administrator to view information about outstanding locks in the lock manager. This is useful for:
+
+- Viewing all current locks, or locks on a specific relation or database
+- Determining which relation has the most ungranted locks (a source of contention)
+- Determining the effect of lock contention on overall database performance
+
+## Progress Reporting
+
+IvorySQL can report the progress of certain long-running commands. The commands that support progress reporting are `ANALYZE`, `CLUSTER`, `CREATE INDEX`, `VACUUM`, `COPY`, and `BASE_BACKUP`.
+
+### VACUUM Progress
+
+The `pg_stat_progress_vacuum` view shows the current phase of each active VACUUM:
+
+| Phase | Description |
+|-------|-------------|
+| `initializing` | Preparing to begin scanning the heap |
+| `scanning heap` | Scanning, pruning, and defragmenting pages |
+| `vacuuming indexes` | Vacuuming the indexes |
+| `vacuuming heap` | Vacuuming the heap after index cleanup |
+| `cleaning up indexes` | Final index cleanup |
+| `truncating heap` | Truncating empty pages at the end of the relation |
+| `performing final cleanup` | Updating `pg_class`, reporting statistics |
+
+### CREATE INDEX Progress
+
+The `pg_stat_progress_create_index` view reports progress during `CREATE INDEX` and `REINDEX`. Key phases include `initializing`, `building index`, and (for concurrent builds) several `waiting for writers/readers` phases.
+
+### ANALYZE Progress
+
+The `pg_stat_progress_analyze` view shows the phase of each active ANALYZE: `initializing`, `acquiring sample rows`, `acquiring inherited sample rows`, `computing statistics`, and `finalizing analyze`.
+
+## Monitoring Disk Usage
+
+### Determining Disk Usage
+
+Each table has a primary heap disk file. Wide-value columns may also have a TOAST file. You can monitor disk space using SQL functions against the system catalogs.
+
+Check disk usage of a table:
+
+```sql
+SELECT pg_relation_filepath(oid), relpages FROM pg_class WHERE relname = 'customer';
+
+ pg_relation_filepath | relpages
+----------------------+----------
+ base/16384/16806     |       60
+(1 row)
+```
+
+Each page is typically 8 kilobytes. Check TOAST table sizes:
+
+```sql
+SELECT relname, relpages
+FROM pg_class,
+     (SELECT reltoastrelid
+      FROM pg_class
+      WHERE relname = 'customer') AS ss
+WHERE oid = ss.reltoastrelid OR
+      oid = (SELECT indexrelid
+             FROM pg_index
+             WHERE indrelid = ss.reltoastrelid)
+ORDER BY relname;
+```
+
+Find your largest tables and indexes:
+
+```sql
+SELECT relname, relpages
+FROM pg_class
+ORDER BY relpages DESC;
+
+       relname        | relpages
+----------------------+----------
+ bigtable             |     3290
+ customer             |     3144
+```
+
+### Disk Full Failure
+
+The most important disk monitoring task is making sure the disk does not become full. A filled data disk will not result in data corruption, but it may prevent useful activity from occurring. If the disk holding the WAL files grows full, the database server may panic and shut down.
+
+<Callout type="tip">
+Some file systems perform badly when they are almost full, so do not wait until the disk is completely full to take action. Move some database files to other file systems by making use of tablespaces if needed.
+</Callout>
+
+## Dynamic Tracing
+
+IvorySQL provides facilities to support dynamic tracing via [DTrace](https://en.wikipedia.org/wiki/DTrace) (Solaris, macOS, FreeBSD, NetBSD, Oracle Linux) or [SystemTap](https://sourceware.org/systemtap/) (Linux).
+
+By default, probes are not compiled into IvorySQL. To include DTrace support, specify `--enable-dtrace` to `configure` at build time.
+
+### Using Probes
+
+Example DTrace script for analyzing transaction counts:
+
+```
+#!/usr/sbin/dtrace -qs
+
+postgresql$1:::transaction-start
+{
+      @start["Start"] = count();
+      self->ts  = timestamp;
+}
+
+postgresql$1:::transaction-abort
+{
+      @abort["Abort"] = count();
+}
+
+postgresql$1:::transaction-commit
+/self->ts/
+{
+      @commit["Commit"] = count();
+      @time["Total time (ns)"] = sum(timestamp - self->ts);
+      self->ts=0;
+}
+```
+
+<Callout type="info">
+SystemTap uses a different notation from DTrace, even though the underlying trace points are compatible. SystemTap scripts must reference probe names using double underscores in place of hyphens (e.g., `transaction__start` instead of `transaction-start`).
+</Callout>
+
+<Cards>
+  <Card
+    title="Maintenance"
+    description="Keep tables and indexes healthy with VACUUM, ANALYZE, and reindexing."
+    href="/docs/v1/monitor-manage/maintenance"
+  />
+  <Card
+    title="Operations Management"
+    description="Handle upgrades, backups, data loading, and performance tuning."
+    href="/docs/v1/monitor-manage/operations"
+  />
+</Cards>

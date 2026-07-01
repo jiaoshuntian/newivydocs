@@ -1,0 +1,91 @@
+---
+title: pgvectorscale
+description: How to install and use the pgvectorscale extension for high-performance large-scale vector search in IvorySQL.
+---
+
+## Overview
+
+pgvectorscale is a PostgreSQL extension launched by Timescale, designed to provide high-performance, cost-effective supplementation to the popular pgvector extension. It is specifically designed for large-scale vector workloads in AI applications, significantly improving the performance of vector similarity search and reducing storage costs through innovative indexing algorithms and compression techniques.
+
+The core features of this extension include:
+
+- **StreamingDiskANN** — a new index type based on Microsoft's DiskANN research
+- **Statistical Binary Quantization (SBQ)** — improved compression methods
+- **Label-filtered vector search** — vector search with filtering support
+
+In benchmark tests, pgvectorscale demonstrates exceptional performance when handling large-scale embedding vectors. Compared to dedicated vector database services, it can achieve:
+
+- Up to **28x lower latency**
+- Up to **16x query throughput**
+- Approximately **75% cost savings**
+
+pgvectorscale is fully compatible with pgvector's data types and query syntax, ensuring seamless integration and migration experience. It is developed using the Rust language and the PGRX framework, making it very suitable for production-level applications that require efficient massive vector search within PostgreSQL.
+
+<Callout type="info">
+The pgvectorscale plugin is already integrated in the IvorySQL installation package. If you installed IvorySQL using the installation package, pgvectorscale can usually be used without manual installation.
+</Callout>
+
+## Installation
+
+<Callout type="tip">
+The source installation environment is Ubuntu 24.04 (x86_64). IvorySQL 1.22 and above must be installed, with the installation path at `/usr/local/ivorysql/ivorysql-1`.
+</Callout>
+
+### Source Installation
+
+<Steps>
+
+### Install Rust toolchain
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### Download pgvectorscale source code
+
+Download the 0.8.0 source package `pgvectorscale-0.8.0.tar.gz` from [https://github.com/timescale/pgvectorscale/releases/tag/0.8.0](https://github.com/timescale/pgvectorscale/releases/tag/0.8.0).
+
+```bash
+tar xvf pgvectorscale-0.8.0.tar.gz
+cd pgvectorscale-0.8.0/pgvectorscale
+```
+
+### Install cargo-pgrx
+
+```bash
+cargo install --locked cargo-pgrx --version $(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "pgrx") | .version')
+cargo pgrx init --pg14 pg_config
+```
+
+### Compile and install the extension
+
+```bash
+cargo pgrx install --release
+```
+
+</Steps>
+
+## Create Extension and Confirm pgvectorscale Version
+
+Connect to the database with psql and execute the following commands:
+
+```sql
+ivorysql=# CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;
+CREATE EXTENSION
+
+ivorysql=# SELECT * FROM pg_available_extensions WHERE name = 'vectorscale';
+   name      | default_version | installed_version |       comment
+-----------  +-----------------+-------------------+--------------------------------------------
+ vectorscale | 0.8.0           |  0.8.0            | diskann access method for vector search.
+(1 row)
+```
+
+## Using pgvectorscale
+
+For pgvectorscale usage, please refer to the [pgvectorscale official documentation](https://github.com/timescale/pgvectorscale).
+
+<Cards>
+  <Card title="Ecosystem Overview" href="/docs/v1/ecosystem" description="All officially supported IvorySQL plugins" />
+  <Card title="pgvector" href="/docs/v1/ecosystem/pgvector" description="pgvector — required by pgvectorscale" />
+  <Card title="PGroonga" href="/docs/v1/ecosystem/pgroonga" description="Multilingual full-text search powered by Groonga" />
+</Cards>

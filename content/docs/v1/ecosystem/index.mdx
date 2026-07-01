@@ -1,0 +1,34 @@
+---
+title: Ecosystem
+description: IvorySQL officially supported plugins and extensions for enhanced database functionality.
+---
+
+IvorySQL, as an advanced open-source database compatible with Oracle and based on PostgreSQL, has powerful extension capabilities and supports a rich ecosystem of plugins. These plugins can help users enhance database functionality in different scenarios, including geospatial information processing, vector retrieval, full-text search, data definition extraction, and path planning.
+
+The following is a list of major plugins currently officially compatible with and supported by IvorySQL:
+
+| Plugin Name | Version | Function Description | Use Cases |
+|---|---|---|---|
+| [PostGIS](/docs/v1/ecosystem/postgis) | 3.4.0 | Provides geospatial data support for IvorySQL, including spatial indexes, spatial functions, and geographic object storage | Geographic Information Systems (GIS), map services, location data analysis |
+| [pgvector](/docs/v1/ecosystem/pgvector) | 0.8.0 | Supports vector similarity search, can be used to store and retrieve high-dimensional vector data | AI applications, image retrieval, recommendation systems, semantic search |
+| [PGroonga](/docs/v1/ecosystem/pgroonga) | 4.0.1 | Provides multilingual full-text search functionality, supports ultra-fast text retrieval and fuzzy matching | Log analysis, multilingual content search, real-time search engines |
+| [pgddl (DDL Extractor)](/docs/v1/ecosystem/pgddl) | 0.20 | Extracts DDL statements from databases, facilitating version management and migration | Database version control, CI/CD integration, structure comparison and synchronization |
+| [pgRouting](/docs/v1/ecosystem/pgrouting) | 3.5.1 | Geographic data-based path planning extension, supports shortest path, traveling salesman problem and other algorithms | Logistics planning, traffic network analysis, path optimization services |
+| [pg_cron](/docs/v1/ecosystem/pg-cron) | 1.6.0 | Provides database-internal scheduled task scheduling functionality, supports regular SQL statement execution | Data cleanup, regular statistics, automated maintenance tasks |
+| [pgsql-http](/docs/v1/ecosystem/pgsql-http) | 1.7.0 | Allows HTTP requests to be initiated in SQL, interacting with external web services | Data collection, API integration, microservice calls |
+| [pgvectorscale](/docs/v1/ecosystem/pgvectorscale) | 0.8.0 | Provides sharding and distributed extension support for vector data, improving large-scale vector processing performance | Distributed vector databases, high-concurrency vector queries |
+
+These plugins have all been tested and adapted by the IvorySQL team to ensure stable operation in the IvorySQL environment. Users can select appropriate plugins based on business needs to further enhance the capabilities and flexibility of the database system.
+
+We will continue to expand and enrich the IvorySQL plugin ecosystem. Community developers are welcome to submit new plugin adaptation suggestions or code contributions. For more detailed usage methods and the latest compatible versions of each plugin, please refer to the corresponding documentation chapters for each plugin.
+
+<Cards>
+  <Card title="PostGIS" href="/docs/v1/ecosystem/postgis" description="Geospatial data support with spatial indexes and functions" />
+  <Card title="pgvector" href="/docs/v1/ecosystem/pgvector" description="High-dimensional vector similarity search for AI applications" />
+  <Card title="PGroonga" href="/docs/v1/ecosystem/pgroonga" description="Multilingual full-text search powered by Groonga" />
+  <Card title="pgddl" href="/docs/v1/ecosystem/pgddl" description="DDL extractor for database version management and migration" />
+  <Card title="pgRouting" href="/docs/v1/ecosystem/pgrouting" description="Network analysis and path planning on spatial data" />
+  <Card title="pg_cron" href="/docs/v1/ecosystem/pg-cron" description="Scheduled task scheduling inside the database" />
+  <Card title="pgsql-http" href="/docs/v1/ecosystem/pgsql-http" description="Initiate HTTP requests directly from SQL" />
+  <Card title="pgvectorscale" href="/docs/v1/ecosystem/pgvectorscale" description="High-performance large-scale vector search with DiskANN" />
+</Cards>

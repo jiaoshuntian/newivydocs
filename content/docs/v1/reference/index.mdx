@@ -1,0 +1,52 @@
+---
+title: Reference
+description: Complete reference documentation for IvorySQL tools, utilities, and frequently asked questions.
+---
+
+This section provides reference material for IvorySQL administrators and developers. It covers the command-line tools bundled with IvorySQL and answers common questions about contributing to and working with the project.
+
+## What's in this section
+
+<Cards>
+  <Card title="Tool Reference" href="/docs/v1/reference/tool-reference">
+    Comprehensive reference for all IvorySQL client and server applications, including clusterdb, pg_dump, psql, pg_ctl, initdb, and more.
+  </Card>
+  <Card title="FAQ" href="/docs/v1/reference/faq">
+    Answers to frequently asked questions about contributing to IvorySQL, licensing, coding guidelines, and the patch review process.
+  </Card>
+</Cards>
+
+## Quick navigation
+
+### Client applications
+
+Tools you run from any host to interact with the database server:
+
+| Tool | Purpose |
+|------|---------|
+| `psql` | Interactive terminal for running SQL |
+| `pg_dump` | Back up a single database |
+| `pg_dumpall` | Back up an entire database cluster |
+| `pg_restore` | Restore from an archive created by `pg_dump` |
+| `createdb` | Create a new database |
+| `dropdb` | Drop an existing database |
+| `createuser` | Create a new database role |
+| `dropuser` | Remove an existing database role |
+| `clusterdb` | Re-cluster tables on their last-used index |
+| `reindexdb` | Rebuild indexes |
+| `vacuumdb` | Run `VACUUM` and `ANALYZE` |
+| `pg_basebackup` | Take a base backup of a running cluster |
+
+### Server applications
+
+Tools typically run by the database administrator on the server host:
+
+| Tool | Purpose |
+|------|---------|
+| `initdb` | Initialize a new database cluster |
+| `pg_ctl` | Start, stop, restart, and control the server |
+| `pg_upgrade` | Upgrade to a new major version |
+| `pg_rewind` | Resync a cluster after timeline divergence |
+| `pg_checksums` | Enable, disable, or verify data checksums |
+| `pg_waldump` | Display write-ahead log contents |
+| `pg_resetwal` | Reset the WAL (last resort recovery tool) |

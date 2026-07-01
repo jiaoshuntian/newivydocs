@@ -1,0 +1,115 @@
+---
+title: Oracle LIKE Operator Compatibility
+description: How IvorySQL implements Oracle-compatible LIKE fuzzy queries, supporting numeric, date, and string field types via implicit text conversion.
+---
+
+In Oracle, the `LIKE` operator works with `varchar2` columns and can also be applied to numeric and date fields. IvorySQL implements the same behavior: because IvorySQL's base string type is `text`, and all other types can be implicitly converted to `text`, `LIKE` can be used across column types without creating custom operators.
+
+## Comparison with Oracle
+
+| Database | LIKE behavior |
+|---|---|
+| Oracle | String type is `varchar2`. LIKE supports columns of number, date, and string field types. |
+| IvorySQL | Base string type is `text`. Other types are implicitly converted to `text`, so LIKE works across types automatically. |
+
+## Test cases
+
+```sql
+CREATE TABLE t_ora_like (
+  id    int,
+  str1  varchar(8),
+  date1 timestamp with time zone,
+  date2 time with time zone,
+  num   int,
+  str2  varchar(8)
+);
+
+INSERT INTO t_ora_like (id, str1, date1, date2) VALUES (123456,'test1','2022-09-26 16:39:20','2022-09-26 16:39:20');
+INSERT INTO t_ora_like (id, str1, date1, date2) VALUES (123457,'test2','2022-09-26 16:40:20','2022-09-26 16:40:20');
+INSERT INTO t_ora_like (id, str1, date1, date2) VALUES (223456,'test3','2022-09-26 16:41:20','2022-09-26 16:41:20');
+INSERT INTO t_ora_like (id, str1, date1, date2) VALUES (123458,'test4','2022-09-26 16:42:20','2022-09-26 16:42:20');
+```
+
+### LIKE on a string column
+
+```sql
+SELECT * FROM t_ora_like WHERE str1 LIKE 'test%';
+```
+
+```
+   id   | str1  |               date1               |    date2    | num | str2
+--------+-------+-----------------------------------+-------------+-----+------
+ 123456 | test1 | 2022-09-26 16:39:20.000000 +08:00 | 16:39:20+08 |     |
+ 123457 | test2 | 2022-09-26 16:40:20.000000 +08:00 | 16:40:20+08 |     |
+ 223456 | test3 | 2022-09-26 16:41:20.000000 +08:00 | 16:41:20+08 |     |
+ 123458 | test4 | 2022-09-26 16:42:20.000000 +08:00 | 16:42:20+08 |     |
+(4 rows)
+```
+
+### LIKE on a timestamp column
+
+```sql
+SELECT * FROM t_ora_like WHERE date1 LIKE '2022%';
+```
+
+```
+   id   | str1  |               date1               |    date2    | num | str2
+--------+-------+-----------------------------------+-------------+-----+------
+ 123456 | test1 | 2022-09-26 16:39:20.000000 +08:00 | 16:39:20+08 |     |
+ 123457 | test2 | 2022-09-26 16:40:20.000000 +08:00 | 16:40:20+08 |     |
+ 223456 | test3 | 2022-09-26 16:41:20.000000 +08:00 | 16:41:20+08 |     |
+ 123458 | test4 | 2022-09-26 16:42:20.000000 +08:00 | 16:42:20+08 |     |
+(4 rows)
+```
+
+### LIKE on a time column
+
+```sql
+SELECT * FROM t_ora_like WHERE date2 LIKE '16%';
+```
+
+```
+   id   | str1  |               date1               |    date2    | num | str2
+--------+-------+-----------------------------------+-------------+-----+------
+ 123456 | test1 | 2022-09-26 16:39:20.000000 +08:00 | 16:39:20+08 |     |
+ 123457 | test2 | 2022-09-26 16:40:20.000000 +08:00 | 16:40:20+08 |     |
+ 223456 | test3 | 2022-09-26 16:41:20.000000 +08:00 | 16:41:20+08 |     |
+ 123458 | test4 | 2022-09-26 16:42:20.000000 +08:00 | 16:42:20+08 |     |
+(4 rows)
+```
+
+### LIKE on an integer column
+
+```sql
+SELECT * FROM t_ora_like WHERE id LIKE '123%';
+```
+
+```
+   id   | str1  |               date1               |    date2    | num | str2
+--------+-------+-----------------------------------+-------------+-----+------
+ 123456 | test1 | 2022-09-26 16:39:20.000000 +08:00 | 16:39:20+08 |     |
+ 123457 | test2 | 2022-09-26 16:40:20.000000 +08:00 | 16:40:20+08 |     |
+ 123458 | test4 | 2022-09-26 16:42:20.000000 +08:00 | 16:42:20+08 |     |
+(3 rows)
+```
+
+### LIKE with NULL pattern
+
+```sql
+SELECT * FROM t_ora_like WHERE id LIKE null;
+```
+
+```
+ id | str1 | date1 | date2 | num | str2
+----+------+-------+-------+-----+------
+(0 rows)
+```
+
+<Cards>
+  <Card title="Data Types and Built-in Functions" href="/docs/v1/oracle-compatibility/data-types">
+    Oracle-compatible data types and string functions available in IvorySQL.
+  </Card>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    GUC variables for controlling Oracle compatibility mode.
+  </Card>
+</Cards>

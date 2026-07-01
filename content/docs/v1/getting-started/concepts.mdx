@@ -1,0 +1,83 @@
+---
+title: Concepts
+description: Core concepts of IvorySQL — dual-mode architecture, Oracle compatibility, product goals, and application scenarios.
+---
+
+## Introduction to IvorySQL
+
+### Overview
+
+IvorySQL is an advanced, full-featured, Oracle-compatible open-source PostgreSQL with a firm commitment to always remain 100% compatible with and a direct replacement for the latest PostgreSQL.
+
+IvorySQL adds a GUC parameter called `ivorysql.compatible_mode` to control the compatibility mode. It has two values: `oracle` and `pg`.
+
+When initializing the data directory, specify the compatibility mode using the `-m` parameter:
+
+- `-m pg` — the data directory operates in PostgreSQL mode. In this mode, `ivorysql.compatible_mode` is inactive, and the database supports 100% of PostgreSQL syntax and functions.
+- `-m oracle` (or omitting `-m`) — the data directory operates in Oracle compatibility mode. In this mode, the initial value of `ivorysql.compatible_mode` is `oracle` and some PostgreSQL-only syntax is not supported by default. You can switch to full PostgreSQL syntax at any time with `SET ivorysql.compatible_mode TO pg`.
+
+### Product Goals and Scope
+
+IvorySQL is committed to the principles of the [open source approach](https://opensource.com/open-source-way) and to building a healthy, inclusive community. Good ideas can come from anywhere — only by including diverse perspectives can the best decisions be made.
+
+While the first release of IvorySQL focuses on Oracle-compatible features, the future roadmap and feature set are defined by the community in an open-source manner.
+
+### Core Features
+
+IvorySQL is developed on top of PostgreSQL and provides strong Oracle compatibility. It is suitable for scenarios that currently rely on either PostgreSQL or Oracle.
+
+### Competitive Advantages
+
+- **Core Open Source**: IvorySQL's core code, including all compatibility features, is fully open under an open-source license with no vendor restrictions.
+- **Oracle Compatible**: Oracle databases can be migrated directly to IvorySQL.
+- **Customizable**: Download the source code and customize it to your requirements.
+- **Easy to Use**: IvorySQL reduces administration and maintenance costs for system administrators, provides a simple interface and seamless third-party tool integration for developers, and provides easy data access for data analysts.
+- **Powered by Highgo**: Backed by the leading PostgreSQL database provider, Highgo.
+
+### Technical Ecology
+
+IvorySQL is based on PostgreSQL with complete SQL support, rock-solid reliability, and a large ecosystem of compatible tools, drivers, and extensions.
+
+## Core Application Scenarios
+
+### Enterprise Database
+
+For ERP systems, transaction systems, and financial applications where data cannot be lost and business logic is complex. IvorySQL provides high availability under the premise of data consistency, and lets you implement complex business logic with straightforward SQL programming.
+
+### Applications with Location-Based Services (LBS)
+
+Large-scale games, O2O, and other applications that need world map support, proximity queries, and distance calculations. PostGIS adds geographic object support, allowing location queries directly in SQL without complex custom code.
+
+### Data Warehousing and Big Data
+
+With more data types and powerful computing capability, IvorySQL makes it easier to build a data warehouse or big data analytics platform.
+
+### Website or App Development
+
+IvorySQL's performance and features can effectively improve website performance and reduce development complexity.
+
+### Database Migration
+
+If you need to migrate an Oracle database to PostgreSQL, IvorySQL is a natural migration target — it supports Oracle syntax directly, reducing the migration effort significantly.
+
+## Oracle Compatibility Features
+
+IvorySQL is a powerful open-source object-relational database management system (ORDBMS). In addition to storing data securely following best practices, it provides Oracle syntax compatibility for scenarios where Oracle is currently used.
+
+The following Oracle compatibility features are supported in v1:
+
+1. [Dual-Parser Architecture](/docs/v1/oracle-compatibility/architecture/dual-parser) — Frame design and dual-parser implementation
+2. [GUC Framework](/docs/v1/oracle-compatibility/guc-framework) — Global User Configuration for compatibility mode control
+3. [Case Conversion](/docs/v1/oracle-compatibility/case-conversion) — Oracle-compatible identifier case handling
+4. [Dual-Mode Design](/docs/v1/oracle-compatibility/architecture/dual-mode) — Switching between Oracle and PostgreSQL modes
+5. [LIKE Operator](/docs/v1/oracle-compatibility/like-operator) — Oracle-compatible `LIKE` behavior
+6. [Anonymous Block](/docs/v1/oracle-compatibility/anonymous-block) — Oracle-compatible anonymous PL/SQL blocks
+7. [PL/iSQL & Stored Procedures](/docs/v1/oracle-compatibility/pl-isql) — Oracle-compatible functions and stored procedures
+8. [Data Types & Built-in Functions](/docs/v1/oracle-compatibility/data-types) — Oracle-compatible built-in data types and functions
+9. [Ports and IP](/docs/v1/oracle-compatibility/ports-ip) — Oracle compatibility mode network configuration
+
+<Cards>
+  <Card title="Quick Start" href="/docs/v1/getting-started/quick-start" description="Install IvorySQL and run your first query in minutes." />
+  <Card title="Oracle Compatibility" href="/docs/v1/oracle-compatibility" description="Full reference for all Oracle-compatible features." />
+  <Card title="Deploy" href="/docs/v1/deploy" description="Installation guides for all platforms." />
+</Cards>

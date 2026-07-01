@@ -1,0 +1,71 @@
+---
+title: pgddl (DDL Extractor)
+description: How to install and use the pgddl extension to extract DDL statements from IvorySQL databases.
+---
+
+## Overview
+
+pgddl is a SQL function extension specifically designed for PostgreSQL databases. It generates clear, formatted SQL DDL (Data Definition Language) scripts directly from the database system catalog — for example, `CREATE TABLE` or `ALTER FUNCTION` statements. It solves the problem that PostgreSQL natively lacks commands like `SHOW CREATE TABLE`, allowing users to easily obtain object creation statements in a pure SQL environment without relying on external tools such as pg_dump.
+
+This extension provides a complete solution through a set of simple SQL functions, with advantages including:
+
+- Requires only SQL queries to operate
+- Supports flexible object filtering through `WHERE` clauses
+- Intelligently handles dependencies between objects to generate complete scripts including Drop and Create steps
+
+This makes pgddl particularly suitable for scenarios such as database change management, upgrade script writing, and structural auditing.
+
+<Callout type="warn">
+ddlx is still under development and may not yet cover all PostgreSQL object types and advanced options. Generated scripts should always be checked and tested in non-production environments first to ensure their correctness and safety.
+</Callout>
+
+## Installation
+
+<Callout type="tip">
+The source installation environment is Ubuntu 24.04 (x86_64). IvorySQL 1.22 or a higher version must be installed, with the installation path at `/usr/local/ivorysql/ivorysql-1`.
+</Callout>
+
+### Source Installation
+
+<Steps>
+
+### Download and extract pgddl
+
+Download `pgddl-0.20.tar.gz` from [https://github.com/lacanoid/pgddl/releases/tag/0.20](https://github.com/lacanoid/pgddl/releases/tag/0.20) and extract it.
+
+### Build and install
+
+```bash
+cd pgddl-0.20
+# Set the PG_CONFIG environment variable to the pg_config path
+# e.g.: /usr/local/ivorysql/ivorysql-4/bin/pg_config
+make PG_CONFIG=/path/to/pg_config
+make PG_CONFIG=/path/to/pg_config install
+```
+
+</Steps>
+
+## Create Extension and Confirm ddlx Version
+
+Connect to the database with psql and execute the following commands:
+
+```sql
+ivorysql=# CREATE extension ddlx;
+CREATE EXTENSION
+
+ivorysql=# SELECT * FROM pg_available_extensions WHERE name = 'ddlx';
+ name | default_version | installed_version |         comment
+------+-----------------+-------------------+-------------------------
+ ddlx | 0.20            | 0.20              | DDL eXtractor functions
+(1 row)
+```
+
+## Using pgddl
+
+For pgddl usage, please refer to the [ddlx Official Documentation](https://github.com/lacanoid/pgddl).
+
+<Cards>
+  <Card title="Ecosystem Overview" href="/docs/v1/ecosystem" description="All officially supported IvorySQL plugins" />
+  <Card title="pg_cron" href="/docs/v1/ecosystem/pg-cron" description="Scheduled task scheduling inside the database" />
+  <Card title="pgsql-http" href="/docs/v1/ecosystem/pgsql-http" description="Initiate HTTP requests directly from SQL" />
+</Cards>

@@ -1,0 +1,144 @@
+---
+title: pgvector
+description: How to install and use the pgvector extension for vector similarity search in IvorySQL.
+---
+
+## Overview
+
+The vector database is an important component of Generative Artificial Intelligence (GenAI). As a significant extension of PostgreSQL, pgvector not only supports vector calculations of up to 16000 dimensions but also provides powerful vector operations and indexing capabilities, enabling PostgreSQL to directly transform into an efficient vector database.
+
+IvorySQL, being developed based on PostgreSQL, inherits the seamless integration capability with pgvector, thereby offering users a wider range of data processing and analysis options. Additionally, in Oracle compatibility mode, the pgvector extension is also available, providing great convenience for Oracle users to use vector databases.
+
+## Principles
+
+PGVector has two indexing algorithms: IVFFLAT and HNSW.
+
+### IVFFLAT
+
+The working principle of IVFFLAT is to cluster similar vectors into regions and build an inverted index mapping each region to its vectors. This allows queries to focus on a subset of the data, enabling fast searches. By adjusting the `lists` and `probes` parameters, IVFFLAT can balance the speed and accuracy of the dataset.
+
+When building an IVFFLAT index, you need to decide how many lists to include in the index. Each list represents a "center" computed using the k-means algorithm. Once all centers are determined, IVFFLAT determines which center each vector is closest to and adds it to the index. When querying, the `ivfflat.probes` parameter controls how many centers to check — more centers means more accurate results at the cost of performance.
+
+### HNSW
+
+HNSW (Hierarchical Navigating Small World) is a graph-based indexing algorithm consisting of multiple layers of neighborhood graphs. It constructs multiple layers of navigation graphs where upper layers are sparser (nodes farther apart) and lower layers are denser (nodes closer together). HNSW achieves high search quality and speed at the cost of significant memory overhead, since it requires storing all vectors in memory along with the graph structure.
+
+## Installation
+
+<Callout type="tip">
+IvorySQL 4.2 (or above) must be installed in the environment. The default installation path is `/usr/local/ivorysql/ivorysql-4`.
+</Callout>
+
+### Source Code Installation
+
+<Steps>
+
+### Set PG_CONFIG
+
+```bash
+export PG_CONFIG=/usr/local/ivorysql/ivorysql-4/bin/pg_config
+```
+
+### Pull pgvector source code
+
+```bash
+git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git
+```
+
+### Install pgvector
+
+```bash
+cd pgvector
+sudo --preserve-env=PG_CONFIG make
+sudo --preserve-env=PG_CONFIG make install
+```
+
+### Create the pgvector extension
+
+```bash
+[ivorysql@localhost ivorysql-4]$ psql
+psql (17.2)
+Type "help" for help.
+
+ivorysql=# create extension vector;
+CREATE EXTENSION
+```
+
+</Steps>
+
+pgvector is now installed. For more usage cases, please refer to the [pgvector documentation](https://github.com/pgvector/pgvector?tab=readme-ov-file#getting-started).
+
+## Oracle Compatibility
+
+In IvorySQL's Oracle compatibility mode, the pgvector extension works correctly.
+
+<Callout type="tip">
+We suggest testing using port 1521 with the command: `psql -p 1521`.
+</Callout>
+
+### Data Type
+
+```sql
+ivorysql=# CREATE TABLE items5 (id bigserial PRIMARY KEY, name varchar2(20), num number(20), embedding bit(3));
+CREATE TABLE
+ivorysql=# INSERT INTO items5 (name, num, embedding) VALUES ('1st oracle data',0, '000'), ('2nd oracle data', 111, '111');
+INSERT 0 2
+ivorysql=# SELECT * FROM items5 ORDER BY bit_count(embedding # '101') LIMIT 5;
+ id |      name       | num | embedding
+----+-----------------+-----+-----------
+  2 | 2nd oracle data | 111 | 111
+  1 | 1st oracle data | 0   | 000
+```
+
+### Anonymous Block
+
+```sql
+ivorysql=# declare
+i vector(3) := '[1,2,3]';
+begin
+raise notice '%', i;
+end;
+ivorysql-# /
+NOTICE:  [1,2,3]
+DO
+```
+
+### Procedure
+
+```sql
+ivorysql=# CREATE OR REPLACE PROCEDURE ora_procedure()
+AS
+p vector(3) := '[4,5,6]';
+begin
+raise notice '%', p;
+end;
+/
+CREATE PROCEDURE
+ivorysql=# call ora_procedure();
+NOTICE:  [4,5,6]
+CALL
+```
+
+### Function
+
+```sql
+ivorysql=# CREATE OR REPLACE FUNCTION AddVector(a vector(3), b vector(3))
+RETURN vector(3)
+IS
+BEGIN
+RETURN a + b;
+END;
+/
+CREATE FUNCTION
+ivorysql=# SELECT AddVector('[1,2,3]','[4,5,6]') FROM DUAL;
+ addvector
+----------------
+ [5,7,9]
+(1 row)
+```
+
+<Cards>
+  <Card title="Ecosystem Overview" href="/docs/v1/ecosystem" description="All officially supported IvorySQL plugins" />
+  <Card title="pgvectorscale" href="/docs/v1/ecosystem/pgvectorscale" description="High-performance large-scale vector search with DiskANN" />
+  <Card title="Anonymous Block" href="/docs/v1/oracle-compatibility/anonymous-block" description="Oracle-compatible anonymous block syntax" />
+</Cards>

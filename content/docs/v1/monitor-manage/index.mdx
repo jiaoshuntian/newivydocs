@@ -1,0 +1,28 @@
+---
+title: "Monitor & Manage"
+description: "Monitor cluster health and manage day-to-day operations in IvorySQL."
+---
+
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+This section covers the tools and techniques you need to keep an IvorySQL cluster healthy and running smoothly. You will find guidance on observing what the database is doing right now, keeping tables and indexes in good shape over time, and handling operational tasks like upgrades, backups, and high availability.
+
+## What's in this section
+
+<Cards>
+  <Card
+    title="Monitoring"
+    description="Observe server activity with pg_stat_* views, track wait events, monitor disk usage, and use dynamic tracing to diagnose problems."
+    href="/docs/v1/monitor-manage/monitoring"
+  />
+  <Card
+    title="Maintenance"
+    description="Keep your database healthy with routine VACUUM, ANALYZE, and reindexing. Understand autovacuum and log file rotation."
+    href="/docs/v1/monitor-manage/maintenance"
+  />
+  <Card
+    title="Operations Management"
+    description="Handle upgrades, access control, backup and restore, data loading, and performance tuning with EXPLAIN."
+    href="/docs/v1/monitor-manage/operations"
+  />
+</Cards>

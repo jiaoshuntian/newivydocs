@@ -1,0 +1,259 @@
+---
+title: Quick Start
+description: Install IvorySQL 1.22 from source or RPM on CentOS and connect to your first database.
+---
+
+This guide shows you how to install IvorySQL 1.22 as quickly as possible and connect to a running instance. Choose the path that fits your situation: build from source, or install via RPM.
+
+## Build from Source
+
+This section walks through a source build on CentOS 7.x (x86_64).
+
+### Prerequisites
+
+Before building IvorySQL, ensure the following packages are available on your system:
+
+- **make** — GNU make version 3.80 or newer
+- **gcc** — ISO/ANSI C compiler, at least C99-compliant (recent GCC versions recommended)
+- **libreadline** — GNU Readline library (used by default)
+- **zlib** — zlib compression library (used by default)
+- **Flex** — version 2.5.31 or later
+- **Bison** — version 1.1775 or later
+
+### Installation Steps
+
+<Steps>
+
+### Enter your home directory
+
+```shell
+[highgo@ivorysql /]$ cd /home/highgo
+```
+
+### Download and extract the source
+
+```shell
+[highgo@ivorysql ~]$ wget https://github.com/IvorySQL/IvorySQL/archive/refs/tags/IvorySQL_1.22.tar.gz
+[highgo@ivorysql ~]$ tar -zxvf IvorySQL_1.22.tar.gz
+[highgo@ivorysql ~]$ mv IvorySQL-IvorySQL_1.22 IvorySQL
+[highgo@ivorysql ~]$ cd IvorySQL/
+```
+
+### Configure the build
+
+```shell
+[highgo@ivorysql IvorySQL]$ ./configure --prefix=/home/highgo
+```
+
+You can change `--prefix` to install IvorySQL wherever you like. Run `./configure` without the flag to use the default installation prefix. See the [PostgreSQL installation manual](http://postgres.cn/docs/14/installation.html) for all available configure options.
+
+### Compile and install
+
+```shell
+[highgo@ivorysql IvorySQL]$ make
+[highgo@ivorysql IvorySQL]$ make install
+```
+
+After installation, your prefix directory will contain:
+
+```
+bin  include  IvorySQL  lib  share
+```
+
+### Set environment variables
+
+Open your shell profile:
+
+```shell
+[highgo@ivorysql ~]$ vi .bash_profile
+```
+
+Add the following lines, then save and quit:
+
+```shell
+PATH=/home/highgo/bin:$PATH
+export PATH
+LD_LIBRARY_PATH=/usr/local/pgsql/lib
+export LD_LIBRARY_PATH
+```
+
+Reload the profile:
+
+```shell
+[highgo@ivorysql ~]$ source .bash_profile
+```
+
+### Initialize the database
+
+```shell
+[highgo@ivorysql ~]$ initdb -D data
+```
+
+Key `initdb` flags:
+- `-D` — location for the database cluster
+- `-m` — set database mode (`oracle` by default; use `-m pg` for PostgreSQL-only mode)
+- `-C` — set case conversion mode (default is `interchange`)
+
+Run `initdb --help` for the full list of parameters.
+
+### Start the server
+
+```shell
+[highgo@ivorysql ~]$ pg_ctl -D data -l logfile start
+```
+
+### Connect
+
+```shell
+[highgo@ivorysql ~]$ psql -d postgres
+psql (14.22)
+Type "help" for help.
+
+postgres=#
+```
+
+</Steps>
+
+Congratulations — IvorySQL is running. You can now enter SQL statements to explore the database.
+
+---
+
+## Install via RPM (CentOS 7.x)
+
+If you prefer a pre-built package, use the RPM installer.
+
+<Steps>
+
+### Download the RPM package
+
+```shell
+wget https://github.com/IvorySQL/IvorySQL/releases/download/Ivory_REL_1_17/IvorySQL-1.22-5a0861c-20260416.x86_64.rpm
+```
+
+### Install the package
+
+```shell
+yum install IvorySQL-1.22-5a0861c-20260416.x86_64.rpm
+```
+
+### Initialize the database
+
+```shell
+/opt/bin/initdb -D data/
+```
+
+### Start and connect
+
+```shell
+pg_ctl -D data/ -l logfile start
+psql -d postgres
+```
+
+</Steps>
+
+---
+
+## Developer Quick Connect
+
+The client tools for connecting to IvorySQL are the same as for PostgreSQL.
+
+### psql
+
+Switch to the `ivorysql` OS user and connect:
+
+```shell
+[root@localhost ~]# su - ivorysql
+-bash-4.2$ psql
+psql (14.22)
+Type "help" for help.
+
+ivorysql=#
+```
+
+### DBeaver
+
+DBeaver is a powerful open-source database client. Create a new connection, select **PostgreSQL** as the driver, and point it at your IvorySQL host and port.
+
+### HIGHGO Developer
+
+HIGHGO Developer is a tool independently developed by Highgo Software that supports PostgreSQL and IvorySQL databases in addition to Highgo databases.
+
+---
+
+## Cluster Setup (Standalone Simulation)
+
+The steps below set up a primary and a single standby on CentOS 7.x using RPM packages.
+
+### Primary Node
+
+<Steps>
+
+### Install and initialize
+
+```shell
+yum install IvorySQL-1.22-5a0861c-20260416.x86_64.rpm
+/opt/bin/initdb -D data/
+./initdb ../data-primary -U postgres
+```
+
+### Create the replication role
+
+```shell
+./psql -U postgres -d postgres -p 5333
+ALTER USER postgres WITH PASSWORD '123456';
+CREATE ROLE repl WITH PASSWORD '123456' REPLICATION LOGIN;
+```
+
+### Edit postgresql.conf
+
+```
+listen_addresses = '*'
+port = 5333
+max_connections = 100
+unix_socket_directories = '/tmp'
+```
+
+### Edit pg_hba.conf
+
+```
+host    all             all             0.0.0.0/0            trust
+host    replication     all             0.0.0.0/0            trust
+```
+
+### Restart the service
+
+</Steps>
+
+### Standby Node
+
+<Steps>
+
+### Install the package
+
+```shell
+yum install IvorySQL-1.22-5a0861c-20260416.x86_64.rpm
+```
+
+### Take a base backup from the primary
+
+```shell
+cd /opt/bin
+./pg_basebackup -h 192.168.xx.xx -p 5333 -U repl -W -Fp -Xs -Pv -R -D ../data-standby01
+```
+
+### Adjust the standby port
+
+```shell
+vi ../data-standby01/postgresql.conf
+# Set: port = 5334
+```
+
+### Start the standby database
+
+</Steps>
+
+<Cards>
+  <Card title="Deploy" href="/docs/v1/deploy" description="Full installation guides for YUM, APT, Docker, and Kubernetes." />
+  <Card title="Oracle Compatibility" href="/docs/v1/oracle-compatibility" description="Explore all Oracle-compatible features available in IvorySQL." />
+  <Card title="Monitor & Manage" href="/docs/v1/monitor-manage" description="Monitoring and maintenance guides for production deployments." />
+</Cards>

@@ -1,0 +1,73 @@
+---
+title: Oracle Anonymous Block
+description: How IvorySQL supports Oracle-compatible anonymous PL/SQL blocks using DECLARE / BEGIN / END / syntax, without persisting the code as a database object.
+---
+
+An anonymous block is a PL/SQL structure that dynamically creates and executes procedural code without storing the code as a persistent database object in the system catalog. IvorySQL supports Oracle's anonymous block syntax, including compatibility in the `psql` client tool, the server backend, and the PL/SQL parser.
+
+## Syntax
+
+```sql
+DECLARE
+  -- variable declarations (optional)
+BEGIN
+  -- executable statements
+EXCEPTION
+  -- exception handlers (optional)
+END;
+/
+```
+
+The trailing `/` on its own line signals the end of the anonymous block in `psql`, matching Oracle's SQL*Plus behavior.
+
+## Examples
+
+### Basic anonymous block
+
+```sql
+DECLARE
+  i integer := 10;
+BEGIN
+  RAISE NOTICE '%', i;
+END;
+/
+```
+
+```
+NOTICE:  10
+```
+
+### Anonymous block with CASE and exception handling
+
+```sql
+DECLARE
+  grade CHAR(1);
+BEGIN
+  grade := 'B';
+  CASE grade
+    WHEN 'A' THEN RAISE NOTICE 'Excellent';
+    WHEN 'B' THEN RAISE NOTICE 'Very Good';
+  END CASE;
+EXCEPTION
+  WHEN CASE_NOT_FOUND THEN
+    RAISE NOTICE 'No such grade';
+END;
+/
+```
+
+```
+NOTICE:  Very Good
+```
+
+<Callout type="info">
+  Anonymous blocks are not stored in the database. If you need to persist reusable procedural logic, use `CREATE FUNCTION` or `CREATE PROCEDURE` instead. See the [PL/iSQL page](/docs/v1/oracle-compatibility/pl-isql) for supported syntax.
+</Callout>
+
+<Cards>
+  <Card title="PL/iSQL — Functions and Stored Procedures" href="/docs/v1/oracle-compatibility/pl-isql">
+    Oracle-compatible CREATE FUNCTION and CREATE PROCEDURE syntax in IvorySQL.
+  </Card>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    GUC variables for enabling Oracle compatibility mode.
+  </Card>
+</Cards>

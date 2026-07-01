@@ -1,0 +1,80 @@
+---
+title: Dual-mode Design
+description: How IvorySQL supports both PostgreSQL mode and Oracle compatibility mode, selected at initdb time via the -m parameter.
+---
+
+IvorySQL operates in one of two database modes: **PG mode** (standard PostgreSQL) or **Oracle mode** (Oracle compatibility). The mode is selected when the database cluster is initialized with `initdb` and is stored in the cluster's control file.
+
+## How modes work
+
+The active mode is tracked by the internal `database_mode` variable:
+
+```
+database_mode = DB_PG     → PostgreSQL mode; cannot be switched after initialization
+database_mode = DB_ORACLE → Oracle compatibility mode (default)
+```
+
+When the database starts, it reads `database_mode` from the cluster to determine which compatibility layer to activate.
+
+In Oracle mode, `initdb` additionally executes the `postgres_oracle.bki` bootstrap SQL, which installs Oracle-compatible catalog entries and built-in objects.
+
+## Initializing with a specific mode
+
+Use the `-m` flag with `initdb` to select the database mode:
+
+<Steps>
+
+### Initialize in PostgreSQL mode
+
+```bash
+./initdb -D ../data -m pg
+```
+
+### Initialize in Oracle compatibility mode (explicit)
+
+```bash
+./initdb -D ../data -m oracle
+```
+
+### Initialize in Oracle compatibility mode (default)
+
+If `-m` is omitted, Oracle compatibility mode is used by default:
+
+```bash
+./initdb -D ../data
+```
+
+</Steps>
+
+<Callout type="warn">
+  The database mode is fixed at initialization time. A cluster initialized with `-m pg` cannot be switched to Oracle mode later, and vice versa.
+</Callout>
+
+## Session-level mode switching
+
+Even within an Oracle-mode cluster, individual sessions can switch their active compatibility mode using the `ivorysql.compatible_mode` GUC parameter:
+
+```sql
+-- Switch the current session to Oracle mode
+SET ivorysql.compatible_mode TO oracle;
+
+-- Switch back to PostgreSQL mode
+SET ivorysql.compatible_mode TO pg;
+
+-- Reset to the connection-time default
+RESET ivorysql.compatible_mode;
+```
+
+Note that `ivorysql.database_mode` (the cluster-level mode) is read-only and cannot be changed with SET, RESET, or RESET ALL.
+
+<Cards>
+  <Card title="Dual-parser Architecture" href="/docs/v1/oracle-compatibility/architecture/dual-parser">
+    How the dual-port and dual-parser system routes Oracle and PostgreSQL connections.
+  </Card>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    Full reference for `ivorysql.compatible_mode`, `ivorysql.database_mode`, and other GUC variables.
+  </Card>
+  <Card title="Ports and IP Configuration" href="/docs/v1/oracle-compatibility/ports-ip">
+    How to configure the Oracle-mode port and listening address.
+  </Card>
+</Cards>

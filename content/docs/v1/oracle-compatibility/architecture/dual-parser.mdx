@@ -1,0 +1,41 @@
+---
+title: IvorySQL Framework Design — Dual Parser
+description: How IvorySQL implements Oracle compatibility through a dual-parser architecture, dual-port design, and the PL/iSQL procedural language.
+---
+
+IvorySQL's compatibility architecture is built around three core design decisions: a dual-port listener, a separate Oracle parser module, and a dedicated PL/iSQL procedural language. Together these minimize interference between Oracle syntax and native PostgreSQL behavior.
+
+## Dual-port design
+
+IvorySQL keeps port 5432 fully compatible with standard PostgreSQL. A second port (default: **1521**) is used for Oracle-mode connections.
+
+- Connections arriving on port **1521** automatically use Oracle compatibility mode.
+- Connections on port **5432** use PostgreSQL mode by default. To enable Oracle compatibility on this port, set the `ivorysql.compatible_mode` GUC parameter explicitly:
+
+```sql
+SET ivorysql.compatible_mode TO oracle;
+```
+
+This design means existing PostgreSQL clients and tools are unaffected by the Oracle compatibility layer.
+
+## Parser module design
+
+A dedicated parser module handles Oracle-specific SQL syntax. Adding a separate parser module, rather than modifying the existing PostgreSQL parser, minimizes the surface area of changes to the core PostgreSQL kernel and keeps Oracle-specific grammar isolated.
+
+## PL/iSQL procedural language
+
+PL/iSQL is IvorySQL's Oracle-compatible procedural language, analogous to Oracle's PL/SQL. It is implemented as a separate procedural language module to avoid conflicts between Oracle procedural syntax and native PL/pgSQL.
+
+A dedicated set of test cases mirrors the structure of PostgreSQL's own test framework, keeping Oracle-specific regression tests isolated from the standard PostgreSQL test suite.
+
+<Cards>
+  <Card title="Dual-mode Design" href="/docs/v1/oracle-compatibility/architecture/dual-mode">
+    How the PG mode and Oracle mode are selected at initdb time and managed at runtime.
+  </Card>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    The GUC variables that control Oracle compatibility mode behavior.
+  </Card>
+  <Card title="PL/iSQL Functions and Stored Procedures" href="/docs/v1/oracle-compatibility/pl-isql">
+    Supported syntax for Oracle-compatible functions and stored procedures.
+  </Card>
+</Cards>

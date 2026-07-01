@@ -1,0 +1,65 @@
+---
+title: Oracle Compatibility Mode Ports and IP
+description: How to configure the Oracle-compatible listening port and address in IvorySQL using ivoryport, ivoryhost, and the --with-oraport compile option.
+---
+
+IvorySQL runs two separate network listeners: one for standard PostgreSQL connections (default port 5432) and one for Oracle-compatible connections (default port 1521). This page describes how to configure the Oracle-mode port and address.
+
+## ivoryhost
+
+`ivoryhost` is the listening address for Oracle-compatible connections. It works like the standard `host` parameter but applies to the Oracle-mode listener. Use `ivoryhost` when connecting in Oracle compatibility mode to specify the host.
+
+## ivoryport
+
+`ivoryport` is the port number for Oracle-compatible connections. It is more complex than a simple address parameter because it can be set at two points:
+
+- **Compile time** — via `./configure --with-oraport=PORT`
+- **Runtime** — via the `-o` flag when starting the server with `pg_ctl`
+
+## Configuring Oracle-mode port and address
+
+<Steps>
+
+### Set the Oracle port at compile time (optional)
+
+Use `--with-oraport` to change the default Oracle-mode port at build time:
+
+```bash
+./configure --with-oraport=5555
+```
+
+### Initialize the database cluster
+
+```bash
+./initdb -D ../data
+```
+
+### Start the server with a custom Oracle port
+
+Use `pg_ctl -o` to pass the Oracle port to the server process:
+
+```bash
+./pg_ctl -o "-p 5433 -o 1522" -D ../data start
+```
+
+In this example:
+- `-p 5433` sets the PostgreSQL-mode port to 5433.
+- `-o 1522` sets the Oracle-mode port to 1522.
+
+</Steps>
+
+<Callout type="info">
+  The Oracle-mode port and address can also be managed through the `ivorysql.port` and `ivorysql.listen_address` GUC parameters in `ivorysql.conf`. Changes to those parameters require a database restart to take effect. See the [GUC Framework](/docs/v1/oracle-compatibility/guc-framework) page for details.
+</Callout>
+
+<Cards>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    Full reference for ivorysql.port, ivorysql.listen_address, and other Oracle-mode GUC variables.
+  </Card>
+  <Card title="Dual-parser Architecture" href="/docs/v1/oracle-compatibility/architecture/dual-parser">
+    How the dual-port design routes Oracle and PostgreSQL connections.
+  </Card>
+  <Card title="Dual-mode Design" href="/docs/v1/oracle-compatibility/architecture/dual-mode">
+    How to initialize the database cluster in Oracle or PostgreSQL mode.
+  </Card>
+</Cards>

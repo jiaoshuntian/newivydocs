@@ -1,0 +1,282 @@
+---
+title: Contributing to IvorySQL
+description: How to contribute code, documentation, issues, and blog posts to the IvorySQL community.
+---
+
+# Contributing to IvorySQL
+
+## Summary
+
+IvorySQL is maintained by a core development team with commit access to the main repository on GitHub. We are eager to get contributions from members of the wider IvorySQL community. If you want to see your changes to code or documents added to IvorySQL and appear in future versions, this guide covers what you need to know.
+
+IvorySQL community welcomes and appreciates all types of contributions.
+
+### Principles of Conduct
+
+For each member, contributor, and leader, everyone should follow our **principles of conduct**. We promise that everyone can participate in the community and receive equal attention, no matter who they are.
+
+We are committed to acting and interacting in ways that contribute to an open, enthusiastic, diverse, inclusive, and healthy community.
+
+### Community Governance
+
+Our team is a continuously open team focused on IvorySQL development. Roles include reviewers, submitters, and maintainers. The typical promotion path is: user → reviewer → submitter → maintainer.
+
+Getting more roles does not grant privileges over other community members. Everyone in the IvorySQL community is equal and has the responsibility to cooperate constructively to build a friendly community.
+
+- **Reviewers/submitters/maintainers** represent the project. Please defend the reputation of the team.
+- **Submitters/maintainers** who have the right to merge pull requests take additional responsibility: when a bug occurs, they should fix it or roll back the project, and help the release manager solve problems found in the test cycle.
+
+## Contributor's Guide
+
+We currently maintain versions after **1.3**. Our versioning follows the PostgreSQL update pace. Please update to the latest version before contributing, and read the format requirements carefully.
+
+### Getting Started
+
+IvorySQL is developed on GitHub. You must have a GitHub account and be familiar with Git tools and workflow. It is also recommended that you follow the developer's mailing list.
+
+<Steps>
+
+### Fork the Repository
+
+Go to [https://github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL) and fork it to your personal account.
+
+### Clone the Repository Locally
+
+```bash
+cd $working_dir  # e.g., ~/Documents/GitHub
+
+git clone git@github.com:$user/IvorySQL.git  # replace $user with your GitHub ID
+```
+
+### Create a New Branch
+
+```bash
+cd $working_dir/IvorySQL
+
+git checkout -b new-branch-name
+```
+
+### Edit Documents or Modify Code
+
+Make your changes in the new branch.
+
+### Generate a Commit
+
+```bash
+git add <file>
+
+git commit -m "commit-message"
+```
+
+### Push to Remote
+
+```bash
+git push -u origin new-branch-name
+```
+
+### Create a Pull Request
+
+Open your repository at `https://github.com/$user/IvorySQL` and click **Compare & pull request**.
+
+</Steps>
+
+### Licensing of IvorySQL Contributions
+
+If the contribution you're submitting is original work, IvorySQL will release it as part of an overall IvorySQL release under **the Apache License, Version 2.0**.
+
+If the contribution is NOT original work, indicate the name of the license and make sure it is compatible with Apache License 2.0. Never remove licensing headers from work that is not your original creation.
+
+## Ways to Contribute
+
+### Code Contribution
+
+Upload your bug fixes, new functions, and other code to your personal repository, then submit a PR to the official repository: [https://github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL).
+
+### Document Contribution
+
+The IvorySQL community provides Chinese and English documentation. You can contribute to one or both. See [https://www.ivorysql.org/zh-CN/docs/intro](https://www.ivorysql.org/zh-CN/docs/intro).
+
+### Test IvorySQL and Report Bugs
+
+- GitHub: [https://github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL)
+- Gitee: [https://gitee.com/IvorySQL/](https://gitee.com/IvorySQL/)
+
+### Participate in IvorySQL Website Construction
+
+IvorySQL official website repository: [https://github.com/IvorySQL/Ivory-www](https://github.com/IvorySQL/Ivory-www)
+
+### Answer Questions on the Mailing List
+
+Mailing list: [https://lists.ivorysql.org/](https://lists.ivorysql.org/)
+
+### Contribute Articles
+
+Submit your article to the blog in the IvorySQL-WWW code repository, or send it to [renjiao@highgo.com](mailto:renjiao@highgo.com).
+
+## Coding Guidelines
+
+Your chances of getting feedback and seeing your code merged greatly depend on how granular your changes are. For larger changes, engage on the developer mailing list first before writing a lot of code. Even when validated, do the work as a series of small, self-contained commits.
+
+For C and C++ parts of IvorySQL, follow [PostgreSQL Coding Conventions](https://www.postgresql.org/docs/current/source.html). In addition:
+
+- For C and Perl code, run `pgindent` if necessary. Use `git diff --color` when reviewing changes to spot spurious whitespace issues.
+- All new functionality contributed to IvorySQL should be covered by regression tests. If uncertain about how to test or document your work, raise the question on the `ivorysql-hackers` mailing list.
+- At minimum, always run `make installcheck-world` to make sure you're not breaking anything.
+
+### Changes Applicable to Upstream PostgreSQL
+
+If the change you're working on touches functionality common between PostgreSQL and IvorySQL, you may be asked to forward-port it to PostgreSQL. This reduces the delta between the two projects and allows broader review from the PostgreSQL community.
+
+### Patch Submission
+
+Push all commits to a branch in your own forked repository and send a pull request.
+
+### Patch Review
+
+A submitted pull request with passing validation checks is available for peer review. Every member of the IvorySQL community is encouraged to review pull requests and provide feedback.
+
+A peer review converges when it receives at least one `+1` and no `-1` votes. At that point, a core team member will pull your changes into the project.
+
+If you're not getting expected feedback for a few days, add a comment asking for updates or send an email to the mailing list.
+
+### Direct Commits to the Repository
+
+Core team members may commit directly to the repository for small, non-functional changes (such as fixing a typo in a comment block). Any change that may result in a test failure must go through the pull request workflow.
+
+## Submitting Issues
+
+<Steps>
+
+### Navigate to New Issue
+
+Go to [https://github.com/IvorySQL/IvorySQL](https://github.com/IvorySQL/IvorySQL) and click **New issue**.
+
+### Select the Issue Type
+
+**Bug Report:**
+
+```
+## Bug Report
+Describe the bug
+
+### IvorySQL Version
+The version of IvorySQL you are using
+
+### OS Version (uname -a)
+Operating system version
+
+### Configuration options (config.status --config)
+
+### Current Behavior
+
+### Expected behavior/code
+
+### Step to reproduce
+
+### Additional context that can be helpful for identifying the problem
+```
+
+**Enhancement:**
+
+```
+## Enhancement
+Describe the functions that you expect to be strengthened
+```
+
+**Feature Request:**
+
+```
+## Feature Request
+Describe the feature that you expect to be real
+```
+
+### Submit
+
+Click **Submit new issue**.
+
+</Steps>
+
+## Submitting Pull Requests
+
+A PR submission should contain only one function or one bug fix. Do not submit multiple functions in a single PR.
+
+<Steps>
+
+### Create a Pull Request
+
+Open your repository at `https://github.com/$user/IvorySQL` and click **Compare & pull request**.
+
+### Fill in PR Information
+
+```
+Fix test
+Describe the function
+```
+
+```
+leave a comment
+Give a detailed description of the submission function
+```
+
+### Submit
+
+Click **Create pull request**.
+
+</Steps>
+
+## Document Contribution Guidelines
+
+### Preparation
+
+1. Download [Markdown](https://markdown.com.cn/tools.html) or [Typora](https://typoraio.cn/) editor.
+2. Check whether the source repository has updates. If so, update and synchronize to your own repository first:
+
+```bash
+git remote
+git fetch upstream
+git merge upstream/main
+git push
+```
+
+3. Familiarize yourself with the [Markdown Specification](#markdown-specification) below.
+
+### Markdown Specification
+
+Key rules for document contributions:
+
+1. Titles are used incrementally from the first level — skipping levels is prohibited.
+2. Titles must use ATX style (`#` prefix).
+3. The `#` of a title must be followed by exactly one blank space.
+4. Only one first-level title per document.
+5. One blank line must appear above every title.
+6. Continuous blank lines are prohibited.
+7. Tab characters are not allowed in documents (including code blocks) — use spaces instead.
+8. Exposed URLs are prohibited. Wrap clickable URLs in angle brackets (`<URL>`).
+9. Bold/italic emphasis identifiers must not have redundant spaces (e.g., `** text **` is wrong; `**text**` is correct).
+10. Code blocks must be wrapped with three backticks. Indented four-space code blocks are prohibited.
+
+## Website Contribution Guide
+
+[IvorySQL Document Site](https://docs.ivorysql.org) uses [Antora](https://antora.org/) to build and is open source. It consists of three parts:
+
+- [ivorysql_docs](https://github.com/IvorySQL/ivorysql_docs) — documentation content
+- [ivorysql_web](https://github.com/IvorySQL/ivorysql_web) — site UI
+- [ivory-doc-builder](https://github.com/IvorySQL/ivory-doc-builder) — build tooling
+
+To contribute, fork the relevant repositories to your personal account, make changes, and submit a PR. The open source team will review and update the site.
+
+<Callout type="tip">
+If you don't have much time for a full contribution, you can send an email to **ivorysql-docs@ivorysql.org**. Dedicated staff will handle every letter.
+</Callout>
+
+<Cards>
+  <Card title="Developer Guide" href="/docs/v1/developers/developer-guide">
+    Architecture overview and SQL reference for IvorySQL developers.
+  </Card>
+  <Card title="Experimental Features" href="/docs/v1/developers/experimental">
+    Preview features under active development in IvorySQL.
+  </Card>
+  <Card title="IvorySQL on GitHub" href="https://github.com/IvorySQL/IvorySQL">
+    Browse the source code, open issues, and submit pull requests.
+  </Card>
+</Cards>

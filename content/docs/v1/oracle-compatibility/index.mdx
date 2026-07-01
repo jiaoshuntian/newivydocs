@@ -1,0 +1,41 @@
+---
+title: Oracle Compatibility
+description: Overview of IvorySQL's Oracle compatibility features, including dual-mode operation, PL/iSQL, built-in data types, and GUC parameters.
+---
+
+IvorySQL is designed to be compatible with Oracle databases while maintaining full PostgreSQL compatibility. The Oracle compatibility layer allows you to run Oracle SQL syntax, use Oracle-style PL/SQL procedural code, and work with Oracle built-in data types and functions — all without leaving your PostgreSQL-based deployment.
+
+The compatibility system is controlled by the `ivorysql.compatible_mode` GUC parameter and the Oracle-mode port (default: 1521). When you connect through port 1521, Oracle compatibility mode is active by default.
+
+<Callout type="info">
+  The `ivorysql.compatible_mode` parameter can be set to `oracle` or `pg` at the session level. Use `SET ivorysql.compatible_mode TO oracle;` to activate Oracle compatibility within an existing session connected to the standard port 5432.
+</Callout>
+
+## What is covered
+
+<Cards>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    New GUC variables introduced by IvorySQL to control Oracle-compatible behavior, including `ivorysql.compatible_mode`, NLS parameters, and more.
+  </Card>
+  <Card title="Case Conversion" href="/docs/v1/oracle-compatibility/case-conversion">
+    How IvorySQL handles identifier case conversion to bridge Oracle and PostgreSQL quoting conventions. Three modes: normal, interchange, and lowercase.
+  </Card>
+  <Card title="LIKE Operator" href="/docs/v1/oracle-compatibility/like-operator">
+    Oracle-compatible LIKE fuzzy queries. IvorySQL extends LIKE to work across numeric, date, and string field types via implicit text conversion.
+  </Card>
+  <Card title="Anonymous Block" href="/docs/v1/oracle-compatibility/anonymous-block">
+    Oracle-style anonymous blocks using DECLARE / BEGIN / END / syntax, compatible with Oracle PL/SQL procedural code.
+  </Card>
+  <Card title="PL/iSQL — Functions and Stored Procedures" href="/docs/v1/oracle-compatibility/pl-isql">
+    Oracle-compatible CREATE FUNCTION and CREATE PROCEDURE syntax, including EDITIONABLE, OUT parameters, invoker rights, and more.
+  </Card>
+  <Card title="Data Types and Built-in Functions" href="/docs/v1/oracle-compatibility/data-types">
+    Oracle-compatible built-in data types (varchar2, number, date, etc.) and functions (sysdate, add_months, to_char, regexp_replace, and 40+ more).
+  </Card>
+  <Card title="Ports and IP Configuration" href="/docs/v1/oracle-compatibility/ports-ip">
+    How to configure the Oracle-mode listening port and address using `ivoryport`, `ivoryhost`, and `--with-oraport`.
+  </Card>
+  <Card title="Architecture" href="/docs/v1/oracle-compatibility/architecture">
+    Internal design of the dual-parser, dual-port, and dual-mode system that powers IvorySQL's Oracle compatibility layer.
+  </Card>
+</Cards>

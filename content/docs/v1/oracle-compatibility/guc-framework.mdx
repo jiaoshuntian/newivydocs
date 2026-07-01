@@ -1,0 +1,72 @@
+---
+title: GUC Framework
+description: New GUC variables introduced by IvorySQL to control Oracle-compatible behavior, including compatible_mode, NLS parameters, port configuration, and more.
+---
+
+IvorySQL extends PostgreSQL's GUC (Grand Unified Configuration) system with additional variables that control Oracle-compatible behavior. These variables are added in `ivy_guc.c` through a unified framework, keeping Oracle-specific configuration separate from the PostgreSQL core.
+
+## How Oracle GUC variables are added
+
+Oracle-compatible GUC parameters are registered in `ivy_guc.c` through five typed arrays:
+
+- `Ivy_ConfigureNamesBool` — boolean parameters
+- `Ivy_ConfigureNamesInt` — integer parameters
+- `Ivy_ConfigureNamesString` — string parameters
+- `Ivy_ConfigureNamesReal` — floating-point parameters
+- `Ivy_ConfigureNamesEnum` — enumerated parameters
+
+To add a new GUC parameter, add its definition to the corresponding array.
+
+## New GUC variables
+
+| Variable | Description |
+|---|---|
+| `ivorysql.compatible_mode` | Controls which database compatibility mode (pg/oracle) is active for the current session. View with `SHOW`. Change with `SET`. Reset to the connection-time mode with `RESET`. Affected by `RESET ALL`. |
+| `ivorysql.database_mode` | Indicates the cluster-level initialization mode (pg/oracle). View with `SHOW`. Not affected by `SET`, `RESET`, or `RESET ALL`. |
+| `ivorysql.datetime_ignore_nls_mask` | Controls whether date formatting is affected by NLS parameters. Default is 0. Change with `SET`. Reset with `RESET`. Affected by `RESET ALL`. |
+| `ivorysql.enable_emptystring_to_NULL` | When set to `on`, empty strings inserted into columns are converted to NULL. Values: on/off. |
+| `ivorysql.listen_address` | The address on which the Oracle-compatible listener accepts connections. Set in `ivorysql.conf` at initdb time. Requires a database restart to take effect. View with `SHOW`. |
+| `ivorysql.port` | The port number for Oracle-compatible connections. Set in `ivorysql.conf` at initdb time. Requires a database restart to take effect. View with `SHOW`. |
+| `nls_date_format` | Default date format string. Defaults to `'YYYY-MM-DD'`. View with `SHOW`. Change with `SET`. Reset with `RESET`. Affected by `RESET ALL`. |
+| `nls_length_semantic` | Compatible with Oracle's parameter of the same name. Controls whether character length is measured in bytes or characters. |
+| `nls_timestamp_format` | Compatible with Oracle's parameter of the same name. Controls the format for timestamp values. |
+| `nls_timestamp_tz_format` | Compatible with Oracle's parameter of the same name. Controls the format for timestamp-with-time-zone values. |
+| `shared_preload_libraries` | Read from `ivorysql.conf` at initdb time. View with `SHOW`. Modify in the configuration file and restart the database to take effect. |
+
+## Usage examples
+
+```sql
+-- Check the current compatibility mode
+SHOW ivorysql.compatible_mode;
+
+-- Switch the current session to Oracle mode
+SET ivorysql.compatible_mode TO oracle;
+
+-- Check the cluster-level mode (read-only)
+SHOW ivorysql.database_mode;
+
+-- Set a custom date format for the session
+SET nls_date_format = 'DD/MM/YYYY';
+
+-- Reset nls_date_format back to 'YYYY-MM-DD'
+RESET nls_date_format;
+
+-- Enable empty-string-to-NULL conversion
+SET ivorysql.enable_emptystring_to_NULL = on;
+```
+
+<Callout type="info">
+  `ivorysql.compatible_mode` resets to the connection-time mode when you run `RESET ivorysql.compatible_mode` or `RESET ALL`. `ivorysql.database_mode` is unaffected by any of these commands — it always reflects the mode the cluster was initialized with.
+</Callout>
+
+<Cards>
+  <Card title="Dual-mode Design" href="/docs/v1/oracle-compatibility/architecture/dual-mode">
+    How PG mode and Oracle mode are selected at initdb time.
+  </Card>
+  <Card title="Ports and IP Configuration" href="/docs/v1/oracle-compatibility/ports-ip">
+    How to configure `ivorysql.port` and `ivorysql.listen_address`.
+  </Card>
+  <Card title="Case Conversion" href="/docs/v1/oracle-compatibility/case-conversion">
+    The `identifier_case_switch` GUC parameter for controlling identifier quoting behavior.
+  </Card>
+</Cards>

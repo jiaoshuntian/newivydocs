@@ -1,0 +1,86 @@
+---
+title: pgsql-http
+description: How to install and use the pgsql-http extension to make HTTP requests directly from SQL in IvorySQL.
+---
+
+## Overview
+
+pgsql-http is an open-source extension designed for PostgreSQL databases that allows users to initiate HTTP requests directly within the database, acting as a built-in web client. The core purpose of this extension is to bridge the gap between databases and external web services, enabling interaction with external APIs through simple SQL function calls without relying on external applications or middleware.
+
+With this extension, developers can directly:
+
+- Retrieve network data (GET) in SQL queries, triggers, or stored procedures
+- Submit data (POST/PUT) to remote endpoints
+- Update (PATCH) or delete (DELETE) remote resources
+
+It provides rich functionality including setting request headers, automatic URL encoding, sending JSON data, and parsing response status, headers, and content.
+
+Typical application scenarios include:
+
+- Real-time retrieval of external data (such as exchange rates, weather information) and storing it in tables
+- Automatic notification of microservices through triggers when data changes
+- Cleaning data in the database and directly submitting it to external APIs
+
+<Callout type="info">
+The pgsql-http plugin is already integrated in the IvorySQL installation package. If you installed IvorySQL using the installation package, pgsql-http can usually be used without manual installation.
+</Callout>
+
+## Installation
+
+<Callout type="tip">
+The source installation environment is Ubuntu 24.04 (x86_64). IvorySQL 1.22 and above must be installed, with the installation path at `/usr/local/ivorysql/ivorysql-1`.
+</Callout>
+
+### Source Installation
+
+<Steps>
+
+### Install dependencies
+
+pgsql-http depends on libcurl. Install the libcurl development files first.
+
+```bash
+sudo apt install libcurl4-openssl-dev
+```
+
+### Download and extract pgsql-http
+
+Download the 1.7.0 source package `pgsql-http-1.7.0.tar.gz` from [https://github.com/pramsey/pgsql-http/releases/tag/v1.7.0](https://github.com/pramsey/pgsql-http/releases/tag/v1.7.0).
+
+### Build and install
+
+```bash
+tar xvf pgsql-http-1.7.0.tar.gz
+cd pgsql-http-1.7.0
+# Ensure pg_config is accessible in PATH
+# e.g.: /usr/local/ivorysql/ivorysql-1/bin/pg_config
+make
+sudo make install
+```
+
+</Steps>
+
+## Create Extension and Confirm http Version
+
+Connect to the database with psql and execute the following commands:
+
+```sql
+ivorysql=# CREATE extension http;
+CREATE EXTENSION
+
+ivorysql=# SELECT * FROM pg_available_extensions WHERE name = 'http';
+   name    | default_version | installed_version |       comment
+-----------+-----------------+-------------------+-------------------------------------------------------------------------
+ http      | 1.7             |  1.7              | HTTP client for PostgreSQL, allows web page retrieval inside the database.
+(1 row)
+```
+
+## Using pgsql-http
+
+For pgsql-http usage, please refer to the [pgsql-http official documentation](https://github.com/pramsey/pgsql-http).
+
+<Cards>
+  <Card title="Ecosystem Overview" href="/docs/v1/ecosystem" description="All officially supported IvorySQL plugins" />
+  <Card title="pg_cron" href="/docs/v1/ecosystem/pg-cron" description="Scheduled task scheduling inside the database" />
+  <Card title="pgvector" href="/docs/v1/ecosystem/pgvector" description="High-dimensional vector similarity search for AI applications" />
+</Cards>

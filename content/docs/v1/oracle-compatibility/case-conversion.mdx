@@ -1,0 +1,109 @@
+---
+title: Identifier Case Conversion
+description: How IvorySQL bridges Oracle and PostgreSQL quoting conventions with three case conversion modes — normal, interchange, and lowercase — controlled via the identifier_case_switch GUC parameter.
+---
+
+Oracle and PostgreSQL handle quoted identifiers differently. Oracle stores unquoted identifiers in uppercase and treats quoted identifiers as case-sensitive; PostgreSQL stores unquoted identifiers in lowercase. IvorySQL bridges this gap with three configurable case conversion modes controlled by the `ivorysql.identifier_case_switch` GUC parameter.
+
+## The three modes
+
+### normal
+
+Quoted identifiers are stored exactly as written — no case conversion is applied.
+
+```sql
+SET ivorysql.compatible_mode TO oracle;
+SET ivorysql.enable_case_switch = true;
+SET ivorysql.identifier_case_switch = normal;
+```
+
+In `normal` mode:
+- `"NORMAL_1"` is stored and looked up as `NORMAL_1`.
+- `"Normal_2"` is stored and looked up as `Normal_2`.
+- `"normal_3"` is stored and looked up as `normal_3`.
+- Unquoted identifiers are still folded to lowercase (standard PostgreSQL behavior).
+
+### interchange (default)
+
+This is the default mode. It swaps the case of identifiers that are entirely uppercase or entirely lowercase, and leaves mixed-case identifiers unchanged.
+
+Rules:
+- All-uppercase quoted identifier → converted to all-lowercase.
+- All-lowercase quoted identifier → converted to all-uppercase.
+- Mixed-case quoted identifier → left unchanged.
+
+```sql
+SET ivorysql.identifier_case_switch = interchange;
+```
+
+This mode allows Oracle applications that quote identifiers in uppercase to work naturally, because `"INTER_CHANGE_1"` (all-uppercase) is stored as `inter_change_1`, matching how PostgreSQL would store an unquoted `inter_change_1`.
+
+### lowercase
+
+All-uppercase quoted identifiers are converted to lowercase. Mixed-case identifiers are left unchanged. All-lowercase identifiers are stored as-is.
+
+```sql
+SET ivorysql.identifier_case_switch = lowercase;
+```
+
+Rules:
+- All-uppercase quoted identifier → converted to all-lowercase.
+- Mixed-case quoted identifier → left unchanged.
+- All-lowercase quoted identifier → stored as-is.
+
+## Setting the mode at cluster initialization
+
+The case conversion mode can be set at `initdb` time using the `-C` flag:
+
+```bash
+# normal mode
+./initdb -D ../data -C 0
+
+# interchange mode (default)
+./initdb -D ../data -C 1
+
+# lowercase mode
+./initdb -D ../data -C 2
+```
+
+The mode is saved to the `global/pg_control` file in the data directory.
+
+## Quick reference
+
+| `-C` value | Mode | Behavior |
+|---|---|---|
+| `0` | `normal` | Quoted identifiers stored as-is |
+| `1` | `interchange` | All-upper ↔ all-lower swap; mixed-case unchanged |
+| `2` | `lowercase` | All-upper → lowercase; mixed-case unchanged |
+
+## Example session (interchange mode)
+
+```sql
+SET ivorysql.compatible_mode TO oracle;
+SET ivorysql.enable_case_switch = true;
+SET ivorysql.identifier_case_switch = interchange;
+
+CREATE TABLE "INTER_CHANGE_1"(c1 int, c2 int);
+CREATE TABLE "Inter_Change_2"(c1 int, c2 int);
+CREATE TABLE "inter_change_3"(c1 int, c2 int);
+
+-- "INTER_CHANGE_1" was stored as inter_change_1 (all-upper → lower)
+SELECT * FROM "INTER_CHANGE_1";  -- ok
+SELECT * FROM INTER_CHANGE_1;    -- ok (unquoted also folds to inter_change_1)
+
+-- "Inter_Change_2" is mixed-case, stored unchanged
+SELECT * FROM "Inter_Change_2";  -- ok
+SELECT * FROM "INTER_CHANGE_2";  -- ERROR: relation "inter_change_2" does not exist
+
+-- "inter_change_3" was stored as INTER_CHANGE_3 (all-lower → upper)
+SELECT * FROM "inter_change_3";  -- ok
+```
+
+<Cards>
+  <Card title="GUC Framework" href="/docs/v1/oracle-compatibility/guc-framework">
+    Full reference for all IvorySQL GUC variables including identifier_case_switch.
+  </Card>
+  <Card title="Dual-mode Design" href="/docs/v1/oracle-compatibility/architecture/dual-mode">
+    How to select PostgreSQL or Oracle mode at cluster initialization.
+  </Card>
+</Cards>

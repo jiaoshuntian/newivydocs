@@ -1,0 +1,261 @@
+---
+title: Developer Guide
+description: Architecture overview, database modeling, and key SQL operations for IvorySQL developers.
+---
+
+# Developer Guide
+
+## Overview
+
+IvorySQL provides unique additional functionality on top of the open source PostgreSQL database.
+
+IvorySQL is committed to delivering value to its end-users through innovation and building on top of open source based database solutions.
+
+Our goal is to deliver a solution with high performance, scalability, reliability, and ease of use for small, medium, and large-scale enterprises.
+
+The extended functionality provided by IvorySQL enables users to build highly performant and scalable PostgreSQL database clusters with better database compatibility and administration. This simplifies the process of migration to PostgreSQL from other DBMS with enhanced database administration experiences.
+
+## Architecture Overview
+
+IvorySQL follows the same general architecture as PostgreSQL with some additions, but does not deviate from its core philosophy.
+
+The most noteworthy modules that received updates for supporting Oracle compatibility are the backend parser and system catalogs.
+
+### Catalog Changes
+
+IvorySQL made changes to PostgreSQL's existing directories and added new structures to support Oracle compatibility. The key additions include new catalog entries for Oracle-compatible data types, functions, and operators.
+
+For full architectural details including the dual-parser system, see the [Dual Parser Architecture](/docs/v1/oracle-compatibility/architecture/dual-parser) and [Dual Mode Architecture](/docs/v1/oracle-compatibility/architecture/dual-mode) pages.
+
+## Database Modeling
+
+### Creating a Database
+
+The first test to see whether you can access the database server is to try to create a database. A running IvorySQL server can manage many databases. Typically, a separate database is used for each project or for each user.
+
+To create a new database named `mydb`:
+
+```bash
+$ createdb mydb
+```
+
+If this produces no response, the step was successful.
+
+Common errors and their causes:
+
+```
+createdb: command not found
+```
+
+IvorySQL was not installed properly or the shell's search path was not set to include it. Try calling with an absolute path:
+
+```bash
+$ /usr/local/pgsql/bin/createdb mydb
+```
+
+```
+createdb: error: connection to server on socket "/tmp/.s.PGSQL.5432" failed: No such file or directory
+```
+
+The server was not started, or it is not listening where `createdb` expects to contact it.
+
+```
+createdb: error: connection to server on socket "/tmp/.s.PGSQL.5432" failed: FATAL: role "joe" does not exist
+```
+
+The administrator has not created a IvorySQL user account for you. IvorySQL user accounts are distinct from operating system user accounts.
+
+```
+createdb: error: database creation failed: ERROR: permission denied to create database
+```
+
+Your user account does not have the privileges required to create a database. The site administrator needs to grant you permission.
+
+To remove a database you no longer need:
+
+```bash
+$ dropdb mydb
+```
+
+<Callout type="warn">
+This action physically removes all files associated with the database and cannot be undone. Only run `dropdb` with great forethought.
+</Callout>
+
+More about `createdb` and `dropdb` can be found in the [PostgreSQL createdb](https://www.postgresql.org/docs/current/app-createdb.html) and [dropdb](https://www.postgresql.org/docs/current/app-dropdb.html) documentation.
+
+### Creating a New Table
+
+You can create a new table by specifying the table name, along with all column names and their types:
+
+```sql
+CREATE TABLE weather (
+    city            varchar(80),
+    temp_lo         int,           -- low temperature
+    temp_hi         int,           -- high temperature
+    prcp            real,          -- precipitation
+    date            date
+);
+```
+
+IvorySQL supports the standard SQL types `int`, `smallint`, `real`, `double precision`, `char(N)`, `varchar(N)`, `date`, `time`, `timestamp`, and `interval`, as well as other general utility types and a rich set of geometric types.
+
+To remove a table:
+
+```sql
+DROP TABLE tablename;
+```
+
+## Writing Data
+
+### INSERT
+
+To insert a new row, use the `INSERT` command:
+
+```sql
+CREATE TABLE products (
+    product_no integer,
+    name text,
+    price numeric
+);
+
+INSERT INTO products VALUES (1, 'Cheese', 9.99);
+```
+
+You can also list columns explicitly (recommended practice):
+
+```sql
+INSERT INTO products (product_no, name, price) VALUES (1, 'Cheese', 9.99);
+```
+
+Insert multiple rows in a single command:
+
+```sql
+INSERT INTO products (product_no, name, price) VALUES
+    (1, 'Cheese', 9.99),
+    (2, 'Bread', 1.99),
+    (3, 'Milk', 2.99);
+```
+
+Insert the result of a query:
+
+```sql
+INSERT INTO products (product_no, name, price)
+  SELECT product_no, name, price FROM new_products
+    WHERE release_date = 'today';
+```
+
+<Callout type="tip">
+When inserting a large amount of data at once, consider using the [COPY](https://www.postgresql.org/docs/current/sql-copy.html) command. It is not as flexible as `INSERT` but is more efficient.
+</Callout>
+
+## Querying Data
+
+### Combining Queries (UNION, INTERSECT, EXCEPT)
+
+The results of two queries can be combined using set operations:
+
+```sql
+query1 UNION [ALL] query2
+query1 INTERSECT [ALL] query2
+query1 EXCEPT [ALL] query2
+```
+
+- `UNION` appends the result of `query2` to `query1` and eliminates duplicate rows (unless `UNION ALL` is used).
+- `INTERSECT` returns all rows that appear in both results (duplicates eliminated unless `INTERSECT ALL`).
+- `EXCEPT` returns all rows in `query1` that are not in `query2` (duplicates eliminated unless `EXCEPT ALL`).
+
+Set operations can be combined:
+
+```sql
+query1 UNION query2 EXCEPT query3
+-- equivalent to:
+(query1 UNION query2) EXCEPT query3
+```
+
+`UNION` and `EXCEPT` associate left-to-right, but `INTERSECT` binds more tightly:
+
+```sql
+query1 UNION query2 INTERSECT query3
+-- equivalent to:
+query1 UNION (query2 INTERSECT query3)
+```
+
+### Parallel Query
+
+#### How Parallel Query Works
+
+When the optimizer determines that parallel query is the fastest execution strategy, it creates a query plan that includes a `Gather` or `Gather Merge` node:
+
+```sql
+EXPLAIN SELECT * FROM pgbench_accounts WHERE filler LIKE '%x%';
+                                     QUERY PLAN
+-------------------------------------------------------------------------------------
+ Gather  (cost=1000.00..217018.43 rows=1 width=97)
+   Workers Planned: 2
+   ->  Parallel Seq Scan on pgbench_accounts  (cost=0.00..216018.33 rows=1 width=97)
+         Filter: (filler ~~ '%x%'::text)
+(4 rows)
+```
+
+The `Gather` or `Gather Merge` node has exactly one child plan — the portion executed in parallel. If it is at the very top of the plan tree, the entire query runs in parallel.
+
+The number of background workers the planner considers is limited by `max_parallel_workers_per_gather`. The total number of background workers is limited by both `max_worker_processes` and `max_parallel_workers`.
+
+#### When Parallel Query Can Be Used
+
+For parallel query plans to be generated, `max_parallel_workers_per_gather` must be set greater than zero, and the system must not be in single-user mode.
+
+The planner will **not** generate parallel plans for a query if:
+
+- The query writes data or locks database rows (with exceptions for `CREATE TABLE ... AS`, `SELECT INTO`, `CREATE MATERIALIZED VIEW`, `REFRESH MATERIALIZED VIEW`).
+- The query might be suspended during execution (e.g., cursors, PL/pgSQL loops).
+- The query uses any function marked `PARALLEL UNSAFE`.
+- The query runs inside another query that is already parallel.
+
+#### Parallel Scans
+
+The following parallel-aware table scans are supported:
+
+- **Parallel sequential scan**: The table's blocks are divided among cooperating processes.
+- **Parallel bitmap heap scan**: One process builds a bitmap indicating which blocks to visit; those blocks are shared among processes.
+- **Parallel index scan / index-only scan**: Cooperating processes take turns reading data from a btree index.
+
+#### Parallel Aggregation
+
+IvorySQL supports parallel aggregation in two stages:
+
+1. Each process performs an aggregation step, producing a partial result (`Partial Aggregate` node).
+2. Partial results are transferred to the leader via `Gather` or `Gather Merge`, which re-aggregates to produce the final result (`Finalize Aggregate` node).
+
+Parallel aggregation is not supported when aggregate functions contain `DISTINCT` or `ORDER BY`, for ordered set aggregates, or when the query involves `GROUPING SETS`.
+
+## Transactions
+
+### ABORT — Abort the Current Transaction
+
+```sql
+ABORT [ WORK | TRANSACTION ] [ AND [ NO ] CHAIN ]
+```
+
+`ABORT` rolls back the current transaction and discards all updates made by it. This command is identical in behavior to the standard SQL `ROLLBACK` command.
+
+**Parameters:**
+
+- `WORK` | `TRANSACTION`: Optional keywords with no effect.
+- `AND CHAIN`: If specified, a new transaction is immediately started with the same transaction characteristics as the just-finished one.
+
+<Callout type="info">
+This guide covers the most important sections of the IvorySQL developer reference. The full content, including the complete SQL command reference and advanced query optimization topics, is available in the original IvorySQL documentation.
+</Callout>
+
+<Cards>
+  <Card title="Dual Parser Architecture" href="/docs/v1/oracle-compatibility/architecture/dual-parser">
+    How IvorySQL's dual parser handles both PostgreSQL and Oracle SQL syntax.
+  </Card>
+  <Card title="Contributing" href="/docs/v1/developers/contributing">
+    How to contribute code and documentation to IvorySQL.
+  </Card>
+  <Card title="Experimental Features" href="/docs/v1/developers/experimental">
+    Preview features available for testing in IvorySQL v1.
+  </Card>
+</Cards>

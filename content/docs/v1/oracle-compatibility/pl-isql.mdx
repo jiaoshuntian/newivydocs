@@ -1,0 +1,103 @@
+---
+title: PL/iSQL — Functions and Stored Procedures
+description: Oracle-compatible CREATE FUNCTION and CREATE PROCEDURE syntax supported in IvorySQL's PL/iSQL procedural language, including EDITIONABLE, OUT parameters, invoker rights, and more.
+---
+
+IvorySQL's PL/iSQL is an Oracle-compatible procedural language that supports Oracle's `CREATE FUNCTION` and `CREATE PROCEDURE` syntax. It is implemented as a separate language module to avoid conflicts with PL/pgSQL. In `psql`, PL/iSQL blocks are terminated with `/` on its own line, matching Oracle's SQL*Plus convention.
+
+## Supported FUNCTION syntax
+
+| Feature |
+|---|
+| EDITIONABLE / NONEDITIONABLE keywords |
+| `RETURN` and `IS` keywords; language does not need to be specified explicitly |
+| Functions with no arguments — parentheses after the function name are optional |
+| Maximum of 32,767 parameters |
+| `END;` terminated with `/` in psql |
+| Variable declarations without the `DECLARE` keyword |
+| `OUT` parameter with `NOCOPY` modifier |
+| `sharing_clause` |
+| `invoker_rights_clause` — default permission changed to DR (DEFINER rights) |
+| `ACCESSIBLE BY` clause |
+| `DEFAULT COLLATION` clause |
+| `result_cache_clause` |
+| `aggregate_clause` |
+| `pipelined_clause` |
+| `sql_macro_clause` |
+| `ALTER FUNCTION` syntax |
+| Functions and stored procedure-related catalog views |
+
+## Supported PROCEDURE syntax
+
+| Feature |
+|---|
+| EDITIONABLE / NONEDITIONABLE keywords |
+| Procedures with no arguments — parentheses after the procedure name are optional |
+| Maximum of 32,767 parameters |
+| `END;` terminated with `/` in psql |
+| `sharing_clause` |
+| `DEFAULT COLLATION` clause |
+| `invoker_rights_clause` |
+| `ACCESSIBLE BY` clause |
+| `ALTER PROCEDURE` syntax |
+| No-argument procedures can be called without `()` |
+| Procedure calls support `EXEC` prefix |
+| Within PL/SQL, procedures can be called by name without `CALL` |
+| Both `--` and `/* */` comment styles are supported |
+
+## Examples
+
+### Anonymous block with local variable reference
+
+```sql
+DECLARE
+  i integer := 10;
+BEGIN
+  RAISE NOTICE '%', i;
+  RAISE NOTICE '%', main.i;
+END;
+/
+```
+
+```
+NOTICE:  10
+NOTICE:  10
+```
+
+### CASE expression with exception handler
+
+```sql
+DECLARE
+  grade CHAR(1);
+BEGIN
+  grade := 'B';
+  CASE grade
+    WHEN 'A' THEN RAISE NOTICE 'Excellent';
+    WHEN 'B' THEN RAISE NOTICE 'Very Good';
+  END CASE;
+EXCEPTION
+  WHEN CASE_NOT_FOUND THEN
+    RAISE NOTICE 'No such grade';
+END;
+/
+```
+
+```
+NOTICE:  Very Good
+```
+
+<Callout type="info">
+  PL/iSQL is a separate procedural language from PL/pgSQL. When writing Oracle-compatible functions and procedures, connect via the Oracle-mode port (default 1521) or set `ivorysql.compatible_mode TO oracle` in your session.
+</Callout>
+
+<Cards>
+  <Card title="Anonymous Block" href="/docs/v1/oracle-compatibility/anonymous-block">
+    Executing Oracle-style anonymous PL/SQL blocks in IvorySQL.
+  </Card>
+  <Card title="Data Types and Built-in Functions" href="/docs/v1/oracle-compatibility/data-types">
+    Oracle-compatible data types and functions available in PL/iSQL.
+  </Card>
+  <Card title="Dual-parser Architecture" href="/docs/v1/oracle-compatibility/architecture/dual-parser">
+    How the PL/iSQL parser is isolated from the PostgreSQL parser.
+  </Card>
+</Cards>

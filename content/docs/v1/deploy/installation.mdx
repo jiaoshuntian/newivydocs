@@ -1,0 +1,603 @@
+---
+title: "Installation Guide"
+description: "Install IvorySQL 1.22 on CentOS or Ubuntu using source code or a binary package."
+---
+
+This guide covers how to install IvorySQL 1.22 on Linux. It walks through software and hardware requirements, environment checks, installation via source code or binary package, database initialization, service configuration, and uninstallation — for both CentOS 7 and Ubuntu 24.04.
+
+## Software and Hardware Requirements
+
+### Supported Operating Systems
+
+| Operating System | Package Download |
+|---|---|
+| CentOS 7 | [GitHub Releases](https://github.com/IvorySQL/IvorySQL/releases) |
+| Ubuntu 24.04 | [GitHub Releases](https://github.com/IvorySQL/IvorySQL/releases) |
+
+### Hardware Requirements
+
+| Parameter | Minimum | Recommended |
+|---|---|---|
+| **CPU** | 4 cores | 16 cores |
+| **Memory** | 4 GB | 64 GB |
+| **Storage** | 800 MB, mechanical disk | Above 5 GB, SSD or NVMe |
+| **Network** | Gigabit LAN | 10 Gigabit network |
+
+## Environment Check
+
+Before deploying IvorySQL, verify your system environment.
+
+<Tabs items={["CentOS 7", "Ubuntu 24.04"]}>
+  <Tab value="CentOS 7">
+
+View the operating system version:
+
+```bash
+cat /etc/redhat-release
+```
+
+View the kernel version:
+
+```bash
+uname -r
+```
+
+View memory and clear cache:
+
+```bash
+free -g
+echo 3 > /proc/sys/vm/drop_caches
+```
+
+  </Tab>
+  <Tab value="Ubuntu 24.04">
+
+View the operating system version:
+
+```bash
+cat /etc/os-release
+```
+
+View the kernel version:
+
+```bash
+uname -r
+```
+
+  </Tab>
+</Tabs>
+
+## Installation
+
+<Tabs items={["CentOS — Source Build", "CentOS — RPM Package", "Ubuntu — Source Build", "Ubuntu — DEB Package"]}>
+  <Tab value="CentOS — Source Build">
+
+<Steps>
+
+### Clone the source code
+
+```bash
+git clone https://github.com/IvorySQL/IvorySQL.git
+```
+
+<Callout type="info">
+You need Git installed and configured before running this command. See the [Git documentation](https://git-scm.com/doc) for setup instructions.
+</Callout>
+
+### Install build dependencies
+
+```bash
+sudo yum install -y bison-devel readline-devel zlib-devel openssl-devel wget
+sudo yum groupinstall -y 'Development Tools'
+```
+
+<Callout type="info">
+"Development Tools" includes gcc, make, flex, and bison.
+</Callout>
+
+### Configure the build
+
+Enter the cloned directory and check out the target release tag, then run configure:
+
+```bash
+git checkout tags/Ivory_REL_1_17
+./configure --prefix=/usr/local/ivorysql/
+```
+
+<Callout type="info">
+If `--prefix` is omitted, the default installation path is `/usr/local/ivorysql`. Keep note of the path you choose — the system will not automatically locate the installed binaries. Run `./configure --help` to see all available options.
+</Callout>
+
+### Compile
+
+```bash
+make
+```
+
+### Run regression tests (optional but recommended)
+
+```bash
+make check
+make all-check-world
+```
+
+### Install
+
+```bash
+make install
+```
+
+</Steps>
+
+  </Tab>
+  <Tab value="CentOS — RPM Package">
+
+<Steps>
+
+### Download the RPM package
+
+```bash
+wget https://github.com/IvorySQL/IvorySQL/releases/download/Ivory_REL_1_17/IvorySQL-1.22-5a0861c-20260416.x86_64.rpm
+```
+
+<Callout type="info">
+The package name in the example may not be the latest version. Check the [releases page](https://github.com/IvorySQL/IvorySQL/releases) and download the latest RPM.
+</Callout>
+
+### Install dependencies and the RPM
+
+```bash
+yum install -y libicu libxslt python3
+rpm -ivh IvorySQL-1.22-5a0861c-20260416.x86_64.rpm
+```
+
+</Steps>
+
+  </Tab>
+  <Tab value="Ubuntu — Source Build">
+
+<Steps>
+
+### Clone the source code
+
+```bash
+git clone https://github.com/IvorySQL/IvorySQL.git
+```
+
+<Callout type="info">
+You need Git installed and configured before running this command. See the [Git documentation](https://git-scm.com/doc) for setup instructions.
+</Callout>
+
+### Install build dependencies
+
+```bash
+sudo apt install -y gcc make flex bison
+```
+
+### Configure the build
+
+Enter the cloned directory and check out the target release tag, then run configure:
+
+```bash
+git checkout tags/Ivory_REL_1_17
+./configure --prefix=/usr/local/ivorysql/
+```
+
+<Callout type="info">
+If `--prefix` is omitted, the default installation path is `/usr/local/ivorysql`. Run `./configure --help` to see all available options.
+</Callout>
+
+### Compile
+
+```bash
+make
+```
+
+### Run regression tests (optional but recommended)
+
+```bash
+make check
+make all-check-world
+```
+
+### Install
+
+```bash
+make install
+```
+
+</Steps>
+
+  </Tab>
+  <Tab value="Ubuntu — DEB Package">
+
+<Steps>
+
+### Download the DEB package
+
+```bash
+wget https://github.com/IvorySQL/IvorySQL/releases/download/IvorySQL_1.22/IvorySQL-1.22-5a0861c-20260416.amd64.deb
+```
+
+<Callout type="info">
+The package name in the example may not be the latest version. Check the [releases page](https://github.com/IvorySQL/IvorySQL/releases) and download the latest DEB.
+</Callout>
+
+### Install the package
+
+```bash
+sudo apt install ./IvorySQL-1.22-5a0861c-20260416.amd64.deb
+```
+
+</Steps>
+
+  </Tab>
+</Tabs>
+
+## Initialize the Database
+
+<Tabs items={["CentOS 7", "Ubuntu 24.04"]}>
+  <Tab value="CentOS 7">
+
+<Steps>
+
+### Create the OS user
+
+Run the following commands as root to create a dedicated `ivorysql` user:
+
+```bash
+/usr/sbin/groupadd ivorysql
+/usr/sbin/useradd -g ivorysql ivorysql -c "IvorySQL1.22"
+passwd ivorysql
+```
+
+### Configure environment variables
+
+Switch to the `ivorysql` user and edit `~/.bash_profile`:
+
+```bash
+umask 022
+export LD_LIBRARY_PATH=/opt/ivorysql/lib:$LD_LIBRARY_PATH
+export PATH=/opt/ivorysql/bin:$PATH
+export PGDATA=/home/ivorysql/data
+```
+
+Apply the changes in the current session:
+
+```bash
+source .bash_profile
+```
+
+### Open the firewall port
+
+If the firewall is active, open port 5333:
+
+```bash
+firewall-cmd --zone=public --add-port=5333/tcp --permanent
+firewall-cmd --reload
+```
+
+<Callout type="info">
+The default IvorySQL port is 5333. External clients cannot connect if this port is not opened.
+</Callout>
+
+### Initialize the data directory
+
+As the `ivorysql` user, run:
+
+```bash
+initdb
+```
+
+<Callout type="info">
+`initdb` behaves the same as in PostgreSQL. You can pass any standard PG initdb options.
+</Callout>
+
+### Start the database
+
+```bash
+pg_ctl start
+```
+
+Verify the service is running:
+
+```bash
+pg_ctl status
+```
+
+</Steps>
+
+  </Tab>
+  <Tab value="Ubuntu 24.04">
+
+<Steps>
+
+### Create the OS user
+
+Run the following commands as root to create a dedicated `ivorysql` user:
+
+```bash
+/usr/sbin/groupadd ivorysql
+/usr/sbin/useradd -m -g ivorysql -s /bin/bash -c "IvorySQL1.22" ivorysql
+usermod -a -G sudo ivorysql
+passwd ivorysql
+
+mkdir /home/ivorysql
+chown -R ivorysql:ivorysql /home/ivorysql
+chmod 755 /home/ivorysql
+```
+
+### Configure environment variables
+
+Switch to the `ivorysql` user and edit `~/.bashrc`:
+
+```bash
+umask 022
+export LD_LIBRARY_PATH=/opt/ivorysql/lib:$LD_LIBRARY_PATH
+export PATH=/opt/ivorysql/bin:/usr/local/ivorysql/bin:$PATH
+export PGDATA=/home/ivorysql/data
+```
+
+Apply the changes in the current session:
+
+```bash
+source .bashrc
+```
+
+### Open the firewall port
+
+If the firewall is active, open port 1521:
+
+```bash
+firewall-cmd --zone=public --add-port=1521/tcp --permanent
+firewall-cmd --reload
+```
+
+<Callout type="info">
+The default IvorySQL port on Ubuntu is 1521. External clients cannot connect if this port is not opened.
+</Callout>
+
+### Initialize the data directory
+
+As the `ivorysql` user, run:
+
+```bash
+initdb -D $PGDATA
+```
+
+### Start the database
+
+```bash
+pg_ctl -D $PGDATA -l logfile start
+```
+
+Verify the service is running:
+
+```bash
+pg_ctl -D $PGDATA status
+```
+
+</Steps>
+
+  </Tab>
+</Tabs>
+
+## Configure the Service
+
+### Client Authentication
+
+Edit `/home/ivorysql/data/pg_hba.conf` and add the following line to allow connections from any host:
+
+```
+host    all             all             0.0.0.0/0               trust
+```
+
+<Callout type="warn">
+Using `trust` authentication means no password is required. This is suitable for development environments only. Use `md5` or `scram-sha-256` in production.
+</Callout>
+
+### Listening Address
+
+<Tabs items={["CentOS 7 (via psql)", "Ubuntu 24.04 (via config file)"]}>
+  <Tab value="CentOS 7 (via psql)">
+
+Connect to the database and set the listening address:
+
+```bash
+psql
+```
+
+```sql
+alter system set listen_addresses = '*';
+```
+
+Then reload the configuration:
+
+```bash
+pg_ctl reload
+```
+
+  </Tab>
+  <Tab value="Ubuntu 24.04 (via config file)">
+
+Edit `/home/ivorysql/data/postgresql.conf` and set:
+
+```
+listen_addresses = '*'
+```
+
+Then reload the configuration:
+
+```bash
+pg_ctl reload
+```
+
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+The default listening address is `127.0.0.1`. Setting it to `*` allows connections from outside the host.
+</Callout>
+
+### systemd Service
+
+Create a systemd service file so IvorySQL starts automatically with the system.
+
+<Tabs items={["CentOS 7", "Ubuntu 24.04"]}>
+  <Tab value="CentOS 7">
+
+```bash
+touch /usr/lib/systemd/system/ivorysql.service
+```
+
+Add the following content:
+
+```ini
+[Unit]
+Description=IvorySQL 1.22 database server
+Documentation=https://www.ivorysql.org
+Requires=network.target local-fs.target
+After=network.target local-fs.target
+
+[Service]
+Type=forking
+
+User=ivorysql
+Group=ivorysql
+
+Environment=PGDATA=/home/ivorysql/data
+
+OOMScoreAdjust=-1000
+
+ExecStart=/opt/ivorysql/bin/pg_ctl start -D ${PGDATA}
+ExecStop=/opt/ivorysql/bin/pg_ctl stop -D ${PGDATA}
+ExecReload=/opt/ivorysql/bin/pg_ctl reload -D ${PGDATA}
+
+TimeoutSec=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+  </Tab>
+  <Tab value="Ubuntu 24.04">
+
+```bash
+sudo vi /etc/systemd/system/ivorysql.service
+```
+
+Add the following content:
+
+```ini
+[Unit]
+Description=IvorySQL 1.22 database server
+Documentation=https://www.ivorysql.org
+Requires=network.target local-fs.target
+After=network.target local-fs.target
+
+[Service]
+Type=forking
+
+User=ivorysql
+Group=ivorysql
+
+Environment=PGDATA=/home/ivorysql/data
+
+OOMScoreAdjust=-1000
+
+ExecStart=/usr/local/ivorysql/bin/pg_ctl start -D ${PGDATA}
+ExecStop=/usr/local/ivorysql/bin/pg_ctl stop -D ${PGDATA}
+ExecReload=/usr/local/ivorysql/bin/pg_ctl reload -D ${PGDATA}
+
+TimeoutSec=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+  </Tab>
+</Tabs>
+
+<Callout type="warn">
+Service file configurations vary. Test thoroughly before using in a production environment.
+</Callout>
+
+Enable and start the service:
+
+```bash
+systemctl enable --now ivorysql.service
+```
+
+Common service management commands:
+
+```bash
+systemctl start ivorysql.service
+systemctl stop ivorysql.service
+systemctl restart ivorysql.service
+systemctl status ivorysql.service
+systemctl reload ivorysql.service
+```
+
+## Uninstall IvorySQL
+
+### Source Build Uninstall
+
+<Steps>
+
+### Stop the service and back up your data
+
+```bash
+systemctl stop ivorysql.service
+```
+
+Make a backup of your data directory before proceeding.
+
+### Uninstall binaries and clean build artifacts
+
+Switch to the root user and navigate to the source directory, then run:
+
+```bash
+make uninstall
+make clean
+```
+
+### Remove remaining files
+
+<Tabs items={["CentOS 7", "Ubuntu 24.04"]}>
+  <Tab value="CentOS 7">
+
+```bash
+systemctl disable ivorysql.service
+mv /usr/lib/systemd/system/ivorysql.service /tmp/
+rm -fr /opt/ivorysql/
+```
+
+  </Tab>
+  <Tab value="Ubuntu 24.04">
+
+```bash
+systemctl disable ivorysql.service
+mv /usr/lib/systemd/system/ivorysql.service /tmp/
+rm -fr /usr/local/ivorysql/
+```
+
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+The `ivorysql` OS user, its environment variables, and any installed dependency packages are not removed automatically. Clean these up as needed, and always ensure your data is backed up before deleting any directories.
+</Callout>
+
+</Steps>
+
+<Cards>
+  <Card title="Deploy Overview" href="/docs/v1/deploy">
+    Return to the Deploy overview.
+  </Card>
+  <Card title="Getting Started" href="/docs/v1/getting-started">
+    Quick start and core concepts for IvorySQL.
+  </Card>
+  <Card title="Oracle Compatibility" href="/docs/v1/oracle-compatibility">
+    Explore IvorySQL's Oracle-compatible features.
+  </Card>
+</Cards>
