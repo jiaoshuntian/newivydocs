@@ -1,4 +1,4 @@
-import { sourceV5 } from '@/lib/source';
+import { source } from '@/lib/source';
 import type { Node } from 'fumadocs-core/page-tree';
 
 function collectUrls(nodes: Node[]): string[] {
@@ -14,8 +14,9 @@ function collectUrls(nodes: Node[]): string[] {
   return urls;
 }
 
+// PDF export only covers the v5 (latest) version.
 export function GET() {
-  const tree = sourceV5.getPageTree();
-  const urls = collectUrls(tree.children);
+  const tree = source.getPageTree();
+  const urls = collectUrls(tree.children).filter((url) => url.startsWith('/docs/v5'));
   return Response.json(urls);
 }

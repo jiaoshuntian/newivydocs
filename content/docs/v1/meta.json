@@ -1,12 +1,10 @@
 {
-  "title": "v5 (latest)",
+  "title": "v1 (PostgreSQL 14)",
   "root": true,
   "pagesIndex": "index",
   "pages": [
     "getting-started",
     "deploy",
-    "cloud-service",
-    "migration",
     "oracle-compatibility",
     "ecosystem",
     "monitor-manage",

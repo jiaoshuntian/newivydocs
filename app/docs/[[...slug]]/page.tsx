@@ -1,4 +1,4 @@
-import { getPageImageV5, getPageMarkdownUrlV5, sourceV5 } from '@/lib/source';
+import { getPageImage, getPageMarkdownUrl, source } from '@/lib/source';
 import {
   DocsBody,
   DocsDescription,
@@ -7,7 +7,7 @@ import {
   MarkdownCopyButton,
   ViewOptionsPopover,
 } from 'fumadocs-ui/layouts/docs/page';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getMDXComponents } from '@/components/mdx';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
@@ -17,14 +17,16 @@ import Link from 'next/link';
 import { Feedback } from '@/components/feedback/client';
 import { onPageFeedbackAction } from '@/lib/feedback';
 
-export default async function Page(props: PageProps<'/docs/v5/[[...slug]]'>) {
+export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   const params = await props.params;
-  const page = sourceV5.getPage(params.slug);
+  if (!params.slug?.length) redirect('/docs/v5');
+
+  const page = source.getPage(params.slug);
   if (!page) notFound();
 
   const MDX = page.data.body;
-  const markdownUrl = getPageMarkdownUrlV5(page).url;
-  const githubEditUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/v5/${page.path}`;
+  const markdownUrl = getPageMarkdownUrl(page).url;
+  const githubEditUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${page.path}`;
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
@@ -40,7 +42,7 @@ export default async function Page(props: PageProps<'/docs/v5/[[...slug]]'>) {
       <DocsBody>
         <MDX
           components={getMDXComponents({
-            a: createRelativeLink(sourceV5, page),
+            a: createRelativeLink(source, page),
           })}
         />
         <Feedback onSendAction={onPageFeedbackAction} />
@@ -80,19 +82,21 @@ export default async function Page(props: PageProps<'/docs/v5/[[...slug]]'>) {
 }
 
 export async function generateStaticParams() {
-  return sourceV5.generateParams();
+  return source.generateParams();
 }
 
-export async function generateMetadata(props: PageProps<'/docs/v5/[[...slug]]'>): Promise<Metadata> {
+export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): Promise<Metadata> {
   const params = await props.params;
-  const page = sourceV5.getPage(params.slug);
+  if (!params.slug?.length) return {};
+
+  const page = source.getPage(params.slug);
   if (!page) notFound();
 
   return {
     title: page.data.title,
     description: page.data.description,
     openGraph: {
-      images: getPageImageV5(page).url,
+      images: getPageImage(page).url,
     },
   };
 }
