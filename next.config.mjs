@@ -5,9 +5,17 @@ const withMDX = createMDX();
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
-  allowedDevOrigins: ['*.trycloudflare.com'],
+  allowedDevOrigins: ['trycloudflare.com'],
   turbopack: {
     root: import.meta.dirname,
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)\\.pdf',
+        headers: [{ key: 'Content-Disposition', value: 'attachment' }],
+      },
+    ];
   },
 };
 

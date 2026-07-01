@@ -32,6 +32,10 @@ systemctl disable firewalld.service
 
 Pre-load these images on every Kubernetes node if your servers don't have direct Docker Hub access:
 
+<Callout type="tip">
+Users in China can pull the following images from the IvorySQL community Harbor registry by replacing the `docker.io/` prefix with `registry.highgo.com/`.
+</Callout>
+
 ```
 docker.io/ivorysql/ivory-operator:v5.0-latest
 docker.io/ivorysql/pgadmin:ubi8-9.9-5.0-1
